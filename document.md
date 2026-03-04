@@ -1,0 +1,171 @@
+COMPLETE STRUCTURE DIAGRAM (FINAL)
+Quick return header (AppBar + Chips + Sort as ONE unit) with “SIMULTANEOUS” movement:
+- Header and content move at the same time (no scroll stealing)
+- Implemented by CUSTOM NestedScrollConnection that UPDATES headerOffset but RETURNS consumed=0
+- Header is OVERLAID on top of content (NOT Scaffold topBar)
+- Content top padding is DYNAMIC (visibleHeaderHeight) to avoid blank gap/underlap
+- BottomCard = ModalBottomSheet overlay with Sections
+- Insets/Scaffold/Overlay centralized at Root
+
+──────────────────────────────────────────────────────────────────────────────
+
+AppRoot
+└─ RootShell
+   ├─ Controllers / State (Single Source of Truth)
+   │   ├─ NavState
+   │   │   ├─ currentRoute: {Top, Library}
+   │   │   └─ navigate(route)
+   │   │
+   │   ├─ ChromeState (route → chrome specs)
+   │   │   ├─ headerSpec
+   │   │   │   ├─ enabled: true
+   │   │   │   ├─ patternName: "Quick return header"
+   │   │   │   ├─ title: "Top" | "Library"
+   │   │   │   ├─ actions: [Settings]
+   │   │   │   └─ accessoryStackSpec (route依存)
+   │   │   │       ├─ (Top)     : none
+   │   │   │       └─ (Library) : [CategoryChipsSpec, SortRowSpec]
+   │   │   ├─ bottomNavSpec
+   │   │   │   └─ items: [Top, Library]
+   │   │   └─ events
+   │   │       └─ onBottomNavClick(Library)
+   │   │           ├─ if currentRoute != Library → navigate(Library)
+   │   │           └─ else (reselect) → OverlayController.open(LibrarySourcePicker)
+   │   │
+   │   ├─ OverlayState / OverlayController (single-flight)
+   │   │   ├─ activeOverlay: None | LibrarySourcePicker | LibrarySortPicker
+   │   │   ├─ open(type): if activeOverlay==type then NO-OP
+   │   │   ├─ close()
+   │   │   └─ confirm(payload) → dispatch to FeatureState
+   │   │
+   │   ├─ QuickReturnHeaderCoordinator (CUSTOM scroll)  ★CORE
+   │   │   ├─ HeaderHeightModel (measured, px only)
+   │   │   │   └─ totalHeaderHeightPx = H                       // AppBar + Accessory合計
+   │   │   ├─ HeaderOffsetModel (px only)
+   │   │   │   └─ headerOffsetPx ∈ [-H, 0]                      // 0=shown, -H=hidden
+   │   │   ├─ VisibleHeaderHeightModel (derived)
+   │   │   │   └─ visibleHeaderHeightPx = H + headerOffsetPx     // [0..H]
+   │   │   ├─ NestedScrollConnection (custom, SIMULTANEOUS policy)
+   │   │   │   ├─ onPreScroll(deltaY):
+   │   │   │   │   - headerOffsetPx = clamp(headerOffsetPx + deltaY, -H, 0)
+   │   │   │   │   - return consumedY = 0   ★IMPORTANT: content also scrolls fully
+   │   │   │   ├─ onPostScroll(deltaY):
+   │   │   │   │   - (optional) apply same clamp if you want follow-up correction
+   │   │   │   │   - return consumedY = 0
+   │   │   │   └─ onPreFling/onPostFling:
+   │   │   │       - default: no snap (keep as-is) OR
+   │   │   │       - optional: weak snap to 0 or -H after fling end
+   │   │   ├─ nestedScrollModifier
+   │   │   │   └─ if OverlayState.activeOverlay != None → Modifier (disabled)
+   │   │   │      else nestedScroll(customConnection)
+   │   │   └─ RouteChangeHandler
+   │   │       ├─ re-measure H
+   │   │       └─ clamp headerOffsetPx into new range [-H,0]
+   │   │
+   │   └─ FeatureState
+   │       ├─ TopState
+   │       └─ LibraryState
+   │           ├─ source: {LocalFiles | SMB | Cache}
+   │           ├─ category: {Albums | AlbumArtists | Artists | Genres | Years}
+   │           └─ sort: { key:{Name|AddedDate|LastPlayed|Year}, order:{Asc|Desc} }
+   │
+   ├─ InsetsHost (ONLY place handling system insets)
+   │   └─ Box( Modifier.windowInsetsPadding(WindowInsets.safeDrawing) )
+   │
+   ├─ RootScaffold (ONLY scaffold; NO topBar used)
+   │   └─ Scaffold(
+   │         contentWindowInsets = WindowInsets(0),
+   │         modifier = QuickReturnHeaderCoordinator.nestedScrollModifier,
+   │         bottomBar = AppBottomNav(bottomNavSpec)
+   │       ) { innerPadding ->
+   │
+   │       └─ ChromeLayoutHost (Box layering for header overlay + content)
+   │           └─ Box( Modifier.fillMaxSize().padding(innerPadding) )
+   │               ├─ ContentLayer  ★KEY: dynamic top padding
+   │               │   └─ Box(
+   │               │        Modifier
+   │               │          .fillMaxSize()
+   │               │          .padding(top = visibleHeaderHeightDp)     // px→dp変換した値
+   │               │      )
+   │               │      └─ NavHost
+   │               │          ├─ TopRoute
+   │               │          │   └─ TopScreenContent (Insets禁止)
+   │               │          │       └─ PrimaryVerticalScrollContainer (single vertical)
+   │               │          └─ LibraryRoute
+   │               │              └─ LibraryScreenContent (Insets禁止)
+   │               │                  └─ PrimaryVerticalScrollContainer (single vertical)
+   │               │
+   │               └─ HeaderOverlayLayer  ★KEY: header moves but does not steal scroll
+   │                   └─ QuickReturnHeaderContainer (ONE moving unit)
+   │                       ├─ clipToBounds(), zIndex(foreground)
+   │                       ├─ apply translation:
+   │                       │    Modifier.offset { IntOffset(0, headerOffsetPx.roundToInt()) }
+   │                       ├─ HeaderHeightMeasure (diff-guarded)
+   │                       │    - measures this container’s total heightPx (H)
+   │                       │    - updates H only if changed (±1px ignore recommended)
+   │                       ├─ TopAppBarRow (pinned)
+   │                       │   └─ TopAppBar(
+   │                       │        windowInsets = WindowInsets(0),
+   │                       │      )
+   │                       │      ├─ title: "Top" | "Library"
+   │                       │      └─ actions: IconButton(Settings)
+   │                       └─ HeaderAccessoryStackSlot (route依存)
+   │                           ├─ (Top)     : none
+   │                           └─ (Library) : Column
+   │                               ├─ CategoryChipsRow
+   │                               │   ├─ Chips: Albums / Album Artists / Artists / Genres / Years
+   │                               │   └─ onSelect(cat) → LibraryState.category = cat
+   │                               └─ SortRow
+   │                                   ├─ Label: "Sort: {key} / {order}"
+   │                                   └─ Button: "Change"
+   │                                       └─ onClick → OverlayController.open(LibrarySortPicker)
+   │
+   └─ OverlayHost (ONLY place showing overlays)
+       └─ BottomCardRouter(activeOverlay)
+           ├─ (None) : nothing
+           ├─ LibrarySourcePickerBottomCard (ModalBottomSheet = overlay)
+           │   └─ BottomCard (Sections)
+           │       ├─ Header: "Library source"
+           │       └─ Section: "Source" (single select, required)
+           │           ├─ Local files
+           │           ├─ SMB
+           │           └─ Cache
+           │       └─ onConfirm(selection) → LibraryState.source = selection; close()
+           └─ LibrarySortPickerBottomCard (ModalBottomSheet = overlay)
+               └─ BottomCard (Sections)
+                   ├─ Header: "Sort options"
+                   ├─ Section: "Sort"  (single select, required)
+                   │   ├─ Name
+                   │   ├─ Added date
+                   │   ├─ Last played
+                   │   └─ Year
+                   ├─ Section: "Order" (single select, required)
+                   │   ├─ Ascending
+                   │   └─ Descending
+                   └─ onConfirm(key, order) → LibraryState.sort = (key, order); close()
+
+──────────────────────────────────────────────────────────────────────────────
+
+CAUTIONS / RULES (for maintainability + “simultaneous” feel)
+R1. Insets: Root only
+- Root以外の statusBarsPadding/systemBarsPadding/windowInsetsPadding を禁止
+- TopAppBar/NavigationBar は windowInsets = WindowInsets(0) 固定（共通コンポーネント経由のみ）
+
+R2. Header overlay + dynamic content padding
+- HeaderはContent上に重ねる（Scaffold topBar不使用）
+- Contentのtop paddingは visibleHeaderHeight（dpに変換）で動的制御（空白/潜り防止）
+
+R3. “Simultaneous” policy = do NOT consume scroll
+- NestedScrollConnectionは headerOffsetPx を更新するが consumed=0 を返す
+- ヘッダとコンテンツが同じドラッグで同時に動く（スクロールを奪わない）
+
+R4. Measurement stability
+- HeaderHeightMeasure は差分がある場合のみ更新（±1px無視推奨）
+- 多言語/フォントスケールで高さが変わる前提（固定dp禁止）
+
+R5. One primary vertical scroll
+- Header連動対象の縦スクロールは1本に限定（ネスト縦スクロール禁止）
+
+R6. Overlay behavior
+- BottomCard(ModalBottomSheet)はOverlayHostのみ、single-flight、Back最優先
+- Overlay表示中は nestedScroll を無効化して体感を安定化

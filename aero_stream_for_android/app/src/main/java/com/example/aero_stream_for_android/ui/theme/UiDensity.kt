@@ -1,0 +1,151 @@
+package com.example.aero_stream_for_android.ui.theme
+
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+object AeroCompactUiTokens {
+    val screenHorizontalPadding = 16.dp
+    val headerTopPadding = 6.dp
+    val headerBottomPadding = 10.dp
+    val headerActionIconSize = 20.dp
+    val headerActionButtonVisualPadding = 8.dp
+    val chipSpacing = 10.dp
+    val chipMinHeight = 32.dp
+    val chipCornerRadius = 18.dp
+    val chipHorizontalPadding = 18.dp
+    val chipVerticalPadding = 8.dp
+    val sortRowTopPadding = 18.dp
+    val sortRowBottomPadding = 14.dp
+    val sortToggleInnerPadding = 8.dp
+    val listArtworkSize = 60.dp
+    val listRowVerticalPadding = 8.dp
+    val listTextStartPadding = 12.dp
+    val listTextEndPadding = 4.dp
+    val listOverflowIconSize = 20.dp
+    val gridHorizontalSpacing = 16.dp
+    val gridVerticalSpacing = 16.dp
+    val gridCaptionSpacing = 8.dp
+    val albumDetailHorizontalPadding = 20.dp
+    val albumDetailTopOverlayPaddingTop = 8.dp
+    val albumDetailHeroTopSpacing = 72.dp
+    val albumDetailArtworkMaxWidth = 340.dp
+    val albumDetailArtworkCornerRadius = 10.dp
+    val albumDetailPrimaryPlayButtonSize = 92.dp
+    val albumDetailSecondaryActionButtonSize = 68.dp
+    val albumDetailFloatingPlayButtonSize = 88.dp
+    val albumDetailTrackRowVerticalPadding = 10.dp
+    val albumDetailFloatingPlayBottomPadding = 118.dp
+    val albumDetailContentBottomPadding = 188.dp
+    val miniPlayerArtworkSize = 44.dp
+    val miniPlayerRowPaddingHorizontal = 8.dp
+    val miniPlayerRowPaddingVertical = 6.dp
+    val miniPlayerTextPaddingHorizontal = 10.dp
+    val emptyStateIconSize = 56.dp
+    // val bottomNavHeight = 64.dp
+    val bottomNavHeight = 78.dp
+    val bottomNavIconSize = 24.dp
+
+    @Composable
+    fun headerPrimaryTextStyle(): TextStyle {
+        return MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold)
+    }
+
+    @Composable
+    fun headerSecondaryTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleLarge
+    }
+
+    @Composable
+    fun headerTertiaryTextStyle(): TextStyle {
+        return MaterialTheme.typography.bodySmall
+    }
+
+    @Composable
+    fun chipLabelTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleSmall
+    }
+
+    @Composable
+    fun chipSelectedContainerColor(): Color {
+        return MaterialTheme.colorScheme.onSurface
+    }
+
+    @Composable
+    fun chipSelectedLabelColor(): Color {
+        return MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    @Composable
+    fun sortLabelTextStyle(): TextStyle {
+        return MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+    }
+
+    @Composable
+    fun rowTitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+    }
+
+    @Composable
+    fun rowSubtitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.bodyMedium
+    }
+
+    @Composable
+    fun gridSubtitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.bodySmall
+    }
+
+    @Composable
+    fun albumDetailTitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold)
+    }
+
+    @Composable
+    fun albumDetailMetaTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleMedium
+    }
+
+    @Composable
+    fun albumDetailTrackNumberTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleMedium
+    }
+
+    @Composable
+    fun albumDetailTrackTitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium)
+    }
+
+    @Composable
+    fun albumDetailTrackSubtitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleMedium
+    }
+
+    @Composable
+    fun albumDetailCollapsedTitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+    }
+
+    @Composable
+    fun albumDetailFooterTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleLarge
+    }
+
+    @Composable
+    fun topAppBarTitleTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+    }
+
+    @Composable
+    fun sectionHeaderTextStyle(): TextStyle {
+        return MaterialTheme.typography.titleSmall
+    }
+
+    @Composable
+    fun bottomNavLabelTextStyle(): TextStyle {
+        return MaterialTheme.typography.labelMedium
+    }
+}

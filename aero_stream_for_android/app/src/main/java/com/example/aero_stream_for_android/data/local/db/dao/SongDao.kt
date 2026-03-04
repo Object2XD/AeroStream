@@ -1,0 +1,230 @@
+package com.example.aero_stream_for_android.data.local.db.dao
+
+import androidx.room.*
+import com.example.aero_stream_for_android.data.local.db.entity.SongEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface SongDao {
+
+    @Query("SELECT * FROM songs ORDER BY title ASC")
+    fun getAllSongs(): Flow<List<SongEntity>>
+
+    @Query("SELECT * FROM songs WHERE source = :source ORDER BY title ASC")
+    fun getSongsBySource(source: String): Flow<List<SongEntity>>
+
+    @Query(
+        """
+        SELECT * FROM songs
+        WHERE album = :album AND albumArtist = :albumArtist
+        ORDER BY trackNumber ASC, title ASC
+        """
+    )
+    fun getSongsByAlbum(album: String, albumArtist: String): Flow<List<SongEntity>>
+
+    @Query(
+        """
+        SELECT * FROM songs
+        WHERE album = :album AND albumArtist = :albumArtist AND source = :source
+        ORDER BY trackNumber ASC, title ASC
+        """
+    )
+    fun getSongsByAlbumAndSource(
+        album: String,
+        albumArtist: String,
+        source: String
+    ): Flow<List<SongEntity>>
+
+    @Query(
+        """
+        SELECT * FROM songs
+        WHERE album = :album
+          AND albumArtist = :albumArtist
+          AND source = :source
+          AND smbConfigId = :smbConfigId
+        ORDER BY trackNumber ASC, title ASC
+        """
+    )
+    fun getSongsByAlbumSourceAndSmbConfig(
+        album: String,
+        albumArtist: String,
+        source: String,
+        smbConfigId: String
+    ): Flow<List<SongEntity>>
+
+    @Query(
+        "SELECT * FROM songs WHERE source = :source AND smbConfigId = :smbConfigId ORDER BY title ASC"
+    )
+    fun getSongsBySourceAndSmbConfig(source: String, smbConfigId: String): Flow<List<SongEntity>>
+
+    @Query(
+        """
+        SELECT * FROM songs
+        WHERE source = :source AND smbConfigId = :smbConfigId AND smbLibraryBucket IN (:buckets)
+        ORDER BY title ASC
+        """
+    )
+    fun getSongsBySourceSmbConfigAndBuckets(
+        source: String,
+        smbConfigId: String,
+        buckets: List<String>
+    ): Flow<List<SongEntity>>
+
+    @Query("SELECT * FROM songs WHERE id = :id")
+    suspend fun getSongById(id: Long): SongEntity?
+
+    @Query(
+        """
+        SELECT * FROM songs 
+        WHERE title LIKE '%' || :query || '%' 
+        OR artist LIKE '%' || :query || '%'
+        OR album LIKE '%' || :query || '%'
+        ORDER BY title ASC
+        """
+    )
+    fun searchSongs(query: String): Flow<List<SongEntity>>
+
+    @Query("SELECT * FROM songs WHERE lastPlayedAt IS NOT NULL ORDER BY lastPlayedAt DESC LIMIT :limit")
+    fun getRecentlyPlayed(limit: Int = 20): Flow<List<SongEntity>>
+
+    @Query("SELECT * FROM songs ORDER BY playCount DESC LIMIT :limit")
+    fun getMostPlayed(limit: Int = 20): Flow<List<SongEntity>>
+
+    @Query("SELECT DISTINCT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count FROM songs GROUP BY album, albumArtist ORDER BY album ASC")
+    fun getAlbums(): Flow<List<AlbumInfo>>
+
+    @Query(
+        """
+        SELECT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count
+        FROM songs
+        WHERE source = :source AND smbConfigId = :smbConfigId
+        GROUP BY album, albumArtist
+        ORDER BY album ASC
+        """
+    )
+    fun getAlbumsBySourceAndSmbConfig(source: String, smbConfigId: String): Flow<List<AlbumInfo>>
+
+    @Query(
+        """
+        SELECT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count
+        FROM songs
+        WHERE source = :source AND smbConfigId = :smbConfigId AND smbLibraryBucket IN (:buckets)
+        GROUP BY album, albumArtist
+        Order by album ASC
+        """
+    )
+    fun getAlbumsBySourceSmbConfigAndBuckets(
+        source: String,
+        smbConfigId: String,
+        buckets: List<String>
+    ): Flow<List<AlbumInfo>>
+
+    @Query("SELECT DISTINCT artist, COUNT(*) as songCount FROM songs GROUP BY artist ORDER BY artist ASC")
+    fun getArtists(): Flow<List<ArtistInfo>>
+
+    @Query(
+        """
+        SELECT artist, COUNT(*) as songCount
+        FROM songs
+        WHERE source = :source AND smbConfigId = :smbConfigId
+        GROUP BY artist
+        ORDER BY artist ASC
+        """
+    )
+    fun getArtistsBySourceAndSmbConfig(source: String, smbConfigId: String): Flow<List<ArtistInfo>>
+
+    @Query(
+        """
+        SELECT artist, COUNT(*) as songCount
+        FROM songs
+        WHERE source = :source AND smbConfigId = :smbConfigId AND smbLibraryBucket IN (:buckets)
+        GROUP BY artist
+        ORDER BY artist ASC
+        """
+    )
+    fun getArtistsBySourceSmbConfigAndBuckets(
+        source: String,
+        smbConfigId: String,
+        buckets: List<String>
+    ): Flow<List<ArtistInfo>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSong(song: SongEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSongs(songs: List<SongEntity>)
+
+    @Update
+    suspend fun updateSong(song: SongEntity)
+
+    @Delete
+    suspend fun deleteSong(song: SongEntity)
+
+    @Query("DELETE FROM songs WHERE source = :source")
+    suspend fun deleteAllBySource(source: String)
+
+    @Query("DELETE FROM songs WHERE source = :source AND smbConfigId = :smbConfigId")
+    suspend fun deleteAllBySourceAndSmbConfig(source: String, smbConfigId: String)
+
+    @Query(
+        """
+        DELETE FROM songs
+        WHERE source = :source AND smbConfigId = :smbConfigId AND smbLibraryBucket IN (:buckets)
+        """
+    )
+    suspend fun deleteBySourceSmbConfigAndBuckets(source: String, smbConfigId: String, buckets: List<String>)
+
+    @Query("DELETE FROM songs WHERE source = :source AND smbConfigId = :smbConfigId AND smbLibraryBucket IS NULL")
+    suspend fun deleteLegacySmbLibraryRows(source: String, smbConfigId: String)
+
+    /**
+     * SMBライブラリのスキャン結果をアトミックに置換する。
+     * レガシー行削除 → 対象バケットの既存行削除 → 新規挿入を1トランザクションで実行。
+     */
+    @Transaction
+    suspend fun replaceSmbLibrarySongs(
+        source: String,
+        smbConfigId: String,
+        buckets: List<String>,
+        songs: List<SongEntity>
+    ) {
+        deleteLegacySmbLibraryRows(source, smbConfigId)
+        deleteBySourceSmbConfigAndBuckets(source, smbConfigId, buckets)
+        insertSongs(songs)
+    }
+
+    @Query("SELECT MAX(sourceUpdatedAt) FROM songs WHERE source = :source AND smbConfigId = :smbConfigId")
+    fun getLastSourceUpdatedAt(source: String, smbConfigId: String): Flow<Long?>
+
+    @Query("UPDATE songs SET lastPlayedAt = :timestamp, playCount = playCount + 1 WHERE id = :songId")
+    suspend fun updatePlayStats(songId: Long, timestamp: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM songs WHERE localPath = :path LIMIT 1")
+    suspend fun getSongByLocalPath(path: String): SongEntity?
+
+    @Query("SELECT * FROM songs WHERE smbPath = :path LIMIT 1")
+    suspend fun getSongBySmbPath(path: String): SongEntity?
+
+    @Query(
+        "SELECT * FROM songs WHERE source = :source AND smbConfigId = :smbConfigId"
+    )
+    suspend fun getSongsBySourceAndSmbConfigList(source: String, smbConfigId: String): List<SongEntity>
+}
+
+/**
+ * アルバム情報のプロジェクション。
+ */
+data class AlbumInfo(
+    val album: String,
+    val albumArtist: String,
+    val albumArtUri: String?,
+    val count: Int
+)
+
+/**
+ * アーティスト情報のプロジェクション。
+ */
+data class ArtistInfo(
+    val artist: String,
+    val songCount: Int
+)
