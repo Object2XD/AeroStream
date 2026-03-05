@@ -28,7 +28,5 @@ data class LibraryAccessorySpec(
 ) : HeaderAccessorySpec
 
 enum class HeaderAction {
-    Settings,
-    RefreshTop,
-    RefreshLibrary
+    Settings
 }

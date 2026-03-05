@@ -23,7 +23,7 @@ data class RootUiState(
     val headerSpec: HeaderSpec = HeaderSpec(
         enabled = true,
         title = "Top",
-        actions = listOf(HeaderAction.RefreshTop, HeaderAction.Settings)
+        actions = listOf(HeaderAction.Settings)
     ),
     val quickReturnHeaderState: QuickReturnHeaderState = QuickReturnHeaderState()
 )
@@ -143,18 +143,13 @@ class RootViewModel @Inject constructor() : ViewModel() {
             Screen.Home.route -> HeaderSpec(
                 enabled = true,
                 title = "Top",
-                actions = listOf(HeaderAction.RefreshTop, HeaderAction.Settings)
+                actions = listOf(HeaderAction.Settings)
             )
 
             Screen.Library.route -> HeaderSpec(
                 enabled = true,
                 title = "Library",
-                actions = buildList {
-                    if (featureState.source == LibrarySource.SMB) {
-                        add(HeaderAction.RefreshLibrary)
-                    }
-                    add(HeaderAction.Settings)
-                },
+                actions = listOf(HeaderAction.Settings),
                 accessory = LibraryAccessorySpec(
                     categories = categoriesForSource(featureState.source),
                     selectedCategory = featureState.category,

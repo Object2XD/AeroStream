@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -51,13 +50,6 @@ fun QuickReturnHeaderContainer(
                         HeaderAction.Settings -> {
                             IconButton(onClick = { onActionClick(action) }) {
                                 Icon(Icons.Default.Settings, contentDescription = "Settings")
-                            }
-                        }
-
-                        HeaderAction.RefreshTop,
-                        HeaderAction.RefreshLibrary -> {
-                            IconButton(onClick = { onActionClick(action) }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                             }
                         }
                     }

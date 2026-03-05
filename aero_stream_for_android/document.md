@@ -169,3 +169,12 @@ R5. One primary vertical scroll
 R6. Overlay behavior
 - BottomCard(ModalBottomSheet)はOverlayHostのみ、single-flight、Back最優先
 - Overlay表示中は nestedScroll を無効化して体感を安定化
+
+R7. SystemBar color ownership (edge-to-edge)
+- enableEdgeToEdge は維持する
+- SystemBar制御の責務は MainActivity（enableEdgeToEdge + SystemBarStyle）に限定する
+- Theme からの Window 直接制御（status/navigationBarColor, InsetsController）は禁止
+- Insetsの適用責務はRoot（WindowInsets.safeDrawing のみ）に限定する
+- 外側領域の描画責務は子（Header/BottomNav 連動レイヤー）に持たせる
+- 実装は「拡張+オフセット」: status/navigation bar分だけ子レイヤーを外へ伸ばして描画する
+- values/themes.xml 側での transparent 指定を禁止（Runtime設定との二重管理禁止）
