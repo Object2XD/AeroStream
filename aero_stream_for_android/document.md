@@ -1,14 +1,22 @@
-COMPLETE STRUCTURE DIAGRAM (FINAL)
-Quick return header (AppBar + Chips + Sort as ONE unit) with “SIMULTANEOUS” movement:
-- Header and content move at the same time (no scroll stealing)
-- Implemented by CUSTOM NestedScrollConnection that UPDATES headerOffset but RETURNS consumed=0
-- Header is OVERLAID on top of content (NOT Scaffold topBar)
-- Content top padding is DYNAMIC (visibleHeaderHeight) to avoid blank gap/underlap
-- BottomCard = ModalBottomSheet overlay with Sections
-- Insets/Scaffold/Overlay centralized at Root
+# COMPLETE STRUCTURE DIAGRAM (FINAL)
 
-──────────────────────────────────────────────────────────────────────────────
+## Quick Return Header の要点
 
+Quick return header（AppBar + Chips + Sort を1ユニットとして扱う）は、
+「同時に動く（SIMULTANEOUS）」体感を維持するために以下を満たします。
+
+- Header と Content は同時に動く（スクロールを奪わない）
+- `NestedScrollConnection` で `headerOffset` を更新しつつ `consumed=0` を返す
+- Header は Content 上にオーバーレイする（`Scaffold topBar` は使わない）
+- Content の top padding は `visibleHeaderHeight` で動的制御する
+- BottomCard は Section 構造を持つ `ModalBottomSheet` オーバーレイとして扱う
+- Insets / Scaffold / Overlay は Root に集約する
+
+---
+
+## Architecture Diagram
+
+```text
 AppRoot
 └─ RootShell
    ├─ Controllers / State (Single Source of Truth)
@@ -143,27 +151,29 @@ AppRoot
                    │   ├─ Ascending
                    │   └─ Descending
                    └─ onConfirm(key, order) → LibraryState.sort = (key, order); close()
+```
 
-──────────────────────────────────────────────────────────────────────────────
+---
 
-CAUTIONS / RULES (for maintainability + “simultaneous” feel)
-R1. Insets: Root only
-- Root以外の statusBarsPadding/systemBarsPadding/windowInsetsPadding を禁止
-- TopAppBar/NavigationBar は windowInsets = WindowInsets(0) 固定（共通コンポーネント経由のみ）
+## CAUTIONS / RULES
 
-R2. Header overlay + dynamic content padding
+### R1. Insets: Root only
+- Root以外の `statusBarsPadding/systemBarsPadding/windowInsetsPadding` を禁止
+- `TopAppBar/NavigationBar` は `windowInsets = WindowInsets(0)` 固定（共通コンポーネント経由のみ）
+
+### R2. Header overlay + dynamic content padding
 - HeaderはContent上に重ねる（Scaffold topBar不使用）
-- Contentのtop paddingは visibleHeaderHeight（dpに変換）で動的制御（空白/潜り防止）
+- Contentのtop paddingは `visibleHeaderHeight`（dp変換）で動的制御（空白/潜り防止）
 
-R3. “Simultaneous” policy = do NOT consume scroll
-- NestedScrollConnectionは headerOffsetPx を更新するが consumed=0 を返す
+### R3. “Simultaneous” policy = do NOT consume scroll
+- `NestedScrollConnection` は `headerOffsetPx` を更新するが `consumed=0` を返す
 - ヘッダとコンテンツが同じドラッグで同時に動く（スクロールを奪わない）
 
-R4. Measurement stability
-- HeaderHeightMeasure は差分がある場合のみ更新（±1px無視推奨）
+### R4. Measurement stability
+- `HeaderHeightMeasure` は差分がある場合のみ更新（±1px無視推奨）
 - 多言語/フォントスケールで高さが変わる前提（固定dp禁止）
 
-R5. One primary vertical scroll
+### R5. One primary vertical scroll
 - Header連動対象の縦スクロールは1本に限定（ネスト縦スクロール禁止）
 
 R6. Overlay behavior
