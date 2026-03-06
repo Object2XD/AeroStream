@@ -28,5 +28,6 @@ data class LibraryAccessorySpec(
 ) : HeaderAccessorySpec
 
 enum class HeaderAction {
+    Search,
     Settings
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,6 +48,12 @@ fun QuickReturnHeaderContainer(
             actions = {
                 spec.actions.forEach { action ->
                     when (action) {
+                        HeaderAction.Search -> {
+                            IconButton(onClick = { onActionClick(action) }) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                        }
+
                         HeaderAction.Settings -> {
                             IconButton(onClick = { onActionClick(action) }) {
                                 Icon(Icons.Default.Settings, contentDescription = "Settings")

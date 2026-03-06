@@ -14,6 +14,7 @@ class SettingsRepository @Inject constructor(
 ) {
     val audioEngine: Flow<AudioEngine> = preferencesDataStore.audioEngine
     val themeMode: Flow<String> = preferencesDataStore.themeMode
+    val recentSearches: Flow<List<String>> = preferencesDataStore.recentSearches
     val smbConfigs: Flow<List<SmbConfig>> = preferencesDataStore.smbConfigs
     val selectedSmbConfigId: Flow<String?> = preferencesDataStore.selectedSmbConfigId
     val selectedSmbConfig: Flow<SmbConfig?> = combine(
@@ -29,6 +30,8 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setAudioEngine(engine: AudioEngine) = preferencesDataStore.setAudioEngine(engine)
     suspend fun setThemeMode(mode: String) = preferencesDataStore.setThemeMode(mode)
+    suspend fun saveRecentSearch(query: String) = preferencesDataStore.saveRecentSearch(query)
+    suspend fun clearRecentSearches() = preferencesDataStore.clearRecentSearches()
     suspend fun addSmbConfig(config: SmbConfig) = preferencesDataStore.addSmbConfig(config)
     suspend fun updateSmbConfig(config: SmbConfig) = preferencesDataStore.updateSmbConfig(config)
     suspend fun deleteSmbConfig(id: String) = preferencesDataStore.deleteSmbConfig(id)

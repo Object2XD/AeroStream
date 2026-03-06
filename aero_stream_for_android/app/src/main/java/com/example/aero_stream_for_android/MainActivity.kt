@@ -38,12 +38,12 @@ class MainActivity : ComponentActivity() {
                 val statusBarStyle = if (darkTheme) {
                     SystemBarStyle.dark(darkScrim)
                 } else {
-                    SystemBarStyle.auto(lightScrim, darkScrim)
+                    SystemBarStyle.light(lightScrim, darkScrim)
                 }
                 val navigationBarStyle = if (darkTheme) {
                     SystemBarStyle.dark(darkScrim)
                 } else {
-                    SystemBarStyle.auto(lightScrim, darkScrim)
+                    SystemBarStyle.light(lightScrim, darkScrim)
                 }
                 this@MainActivity.enableEdgeToEdge(
                     statusBarStyle = statusBarStyle,

@@ -42,6 +42,8 @@ fun SmbBrowserScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             Row(
                 modifier = Modifier

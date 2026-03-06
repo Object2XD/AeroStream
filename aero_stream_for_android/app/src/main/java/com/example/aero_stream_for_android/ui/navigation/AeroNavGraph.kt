@@ -1,5 +1,7 @@
 package com.example.aero_stream_for_android.ui.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
@@ -22,12 +24,17 @@ fun AeroNavGraph(
     libraryFeatureState: LibraryFeatureState,
     onNavigateToPlayer: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateBackFromSearch: () -> Unit = {},
     onNavigateToSmbBrowser: () -> Unit = {}
 ) {
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
     ) {
         composable(Screen.Home.route) {
             HomeScreen(
@@ -57,6 +64,7 @@ fun AeroNavGraph(
 
         composable(Screen.Search.route) {
             SearchScreen(
+                onNavigateBack = onNavigateBackFromSearch,
                 onNavigateToPlayer = onNavigateToPlayer
             )
         }

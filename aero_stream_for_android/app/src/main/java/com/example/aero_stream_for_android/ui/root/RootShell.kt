@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -82,6 +83,7 @@ fun RootShell(
 
     fun handleHeaderAction(action: HeaderAction) {
         when (action) {
+            HeaderAction.Search -> navController.navigate(Screen.Search.route)
             HeaderAction.Settings -> navController.navigate(Screen.Settings.route)
         }
     }
@@ -102,12 +104,18 @@ fun RootShell(
     }
 
     InsetsHost {
-        val edgeBackdropSpec = EdgeBackdropSpec(
-            topTone = MaterialTheme.colorScheme.background,
-            bottomTone = MaterialTheme.colorScheme.surface
+        val appRoute = routeToAppRoute(currentRoute)
+        val edgeBackdropSpec = resolveEdgeBackdropSpec(
+            appRoute = appRoute,
+            colorScheme = MaterialTheme.colorScheme
         )
 
         Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(edgeBackdropSpec.baseTone)
+            )
             EdgeBackdropLayer(
                 spec = edgeBackdropSpec,
                 modifier = Modifier.fillMaxSize()
@@ -132,43 +140,45 @@ fun RootShell(
                             onClick = { showFullPlayer = true }
                         )
                     }
-                    NavigationBar(
-                        modifier = Modifier.height(AeroCompactUiTokens.bottomNavHeight),
-                        containerColor = edgeBackdropSpec.bottomTone,
-                        windowInsets = WindowInsets(0, 0, 0, 0)
-                    ) {
-                        bottomNavItems.forEach { screen ->
-                            val isSelected = when (screen.route) {
-                                Screen.Home.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Top
-                                Screen.Library.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
-                                else -> false
-                            }
-                            NavigationBarItem(
-                                selected = isSelected,
-                                onClick = {
-                                    if (screen.route == Screen.Library.route &&
-                                        rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
-                                    ) {
-                                        rootViewModel.openOverlay(LibrarySourcePickerOverlay)
-                                    } else {
-                                        navigateToTopLevel(screen.route)
-                                        rootViewModel.closeOverlay()
-                                        rootViewModel.resetHeaderOffset()
-                                    }
-                                },
-                                icon = {
-                                    val icon = if (isSelected) screen.selectedIcon else screen.unselectedIcon
-                                    if (icon != null) {
-                                        Icon(icon, contentDescription = screen.title)
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        text = screen.title,
-                                        style = AeroCompactUiTokens.bottomNavLabelTextStyle()
-                                    )
+                    if (rootState.bottomNavSpec.visible) {
+                        NavigationBar(
+                            modifier = Modifier.height(AeroCompactUiTokens.bottomNavHeight),
+                            containerColor = edgeBackdropSpec.bottomTone,
+                            windowInsets = WindowInsets(0, 0, 0, 0)
+                        ) {
+                            bottomNavItems.forEach { screen ->
+                                val isSelected = when (screen.route) {
+                                    Screen.Home.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Top
+                                    Screen.Library.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
+                                    else -> false
                                 }
-                            )
+                                NavigationBarItem(
+                                    selected = isSelected,
+                                    onClick = {
+                                        if (screen.route == Screen.Library.route &&
+                                            rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
+                                        ) {
+                                            rootViewModel.openOverlay(LibrarySourcePickerOverlay)
+                                        } else {
+                                            navigateToTopLevel(screen.route)
+                                            rootViewModel.closeOverlay()
+                                            rootViewModel.resetHeaderOffset()
+                                        }
+                                    },
+                                    icon = {
+                                        val icon = if (isSelected) screen.selectedIcon else screen.unselectedIcon
+                                        if (icon != null) {
+                                            Icon(icon, contentDescription = screen.title)
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = screen.title,
+                                            style = AeroCompactUiTokens.bottomNavLabelTextStyle()
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -194,6 +204,7 @@ fun RootShell(
                         libraryFeatureState = rootState.libraryFeatureState,
                         onNavigateToPlayer = { showFullPlayer = true },
                         onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                        onNavigateBackFromSearch = { navController.popBackStack() },
                         onNavigateToSmbBrowser = { navController.navigate(Screen.SmbBrowser.route) }
                     )
                 }
@@ -227,10 +238,24 @@ fun RootShell(
 }
 
 private data class EdgeBackdropSpec(
+    val baseTone: Color,
     val topTone: Color,
     val bottomTone: Color,
     val enabled: Boolean = true
 )
+
+private fun resolveEdgeBackdropSpec(
+    appRoute: AppRoute?,
+    colorScheme: ColorScheme
+): EdgeBackdropSpec {
+    val isSettings = appRoute == SettingsRoute
+    val bottomTone = if (isSettings) colorScheme.background else colorScheme.surface
+    return EdgeBackdropSpec(
+        baseTone = colorScheme.background,
+        topTone = colorScheme.background,
+        bottomTone = bottomTone
+    )
+}
 
 @Composable
 private fun EdgeBackdropLayer(

@@ -21,7 +21,7 @@ AppRoot
 └─ RootShell
    ├─ Controllers / State (Single Source of Truth)
    │   ├─ NavState
-   │   │   ├─ currentRoute: {Top, Library}
+   │   │   ├─ currentRoute: {Top, Library, AlbumDetail, Search, Settings, SmbBrowser}
    │   │   └─ navigate(route)
    │   │
    │   ├─ ChromeState (route → chrome specs)
@@ -29,11 +29,17 @@ AppRoot
    │   │   │   ├─ enabled: true
    │   │   │   ├─ patternName: "Quick return header"
    │   │   │   ├─ title: "Top" | "Library"
-   │   │   │   ├─ actions: [Settings]
+   │   │   │   ├─ actions: [Search, Settings]
    │   │   │   └─ accessoryStackSpec (route依存)
    │   │   │       ├─ (Top)     : none
    │   │   │       └─ (Library) : [CategoryChipsSpec, SortRowSpec]
    │   │   ├─ bottomNavSpec
+   │   │   │   ├─ visible:
+   │   │   │   │   ├─ false when Settings (NonPrimary)
+   │   │   │   │   └─ true for Top/Library/AlbumDetail/Search + SmbBrowser(temporary)
+   │   │   │   ├─ selected:
+   │   │   │   │   ├─ TopRoute -> Top
+   │   │   │   │   └─ Library/AlbumDetail/SmbBrowser -> Library (Searchはnull)
    │   │   │   └─ items: [Top, Library]
    │   │   └─ events
    │   │       └─ onBottomNavClick(Library)
@@ -72,19 +78,30 @@ AppRoot
    │   │
    │   └─ FeatureState
    │       ├─ TopState
-   │       └─ LibraryState
+   │       ├─ LibraryState
    │           ├─ source: {LocalFiles | SMB | Cache}
    │           ├─ category: {Albums | AlbumArtists | Artists | Genres | Years}
    │           └─ sort: { key:{Name|AddedDate|LastPlayed|Year}, order:{Asc|Desc} }
+   │       └─ SearchState
+   │           ├─ query: String
+   │           ├─ recentSearches: DataStore(max=10, dedupe)
+   │           ├─ results: Song[]
+   │           └─ searchBarUi:
+   │               ├─ filled pill (no outline)
+   │               └─ placeholder/input are single-line with ellipsis
    │
    ├─ InsetsHost (ONLY place handling system insets)
    │   └─ Box( Modifier.windowInsetsPadding(WindowInsets.safeDrawing) )
+   │      └─ BaseOpaqueLayer( fillMaxSize + background ) // always opaque
    │
    ├─ RootScaffold (ONLY scaffold; NO topBar used)
    │   └─ Scaffold(
    │         contentWindowInsets = WindowInsets(0),
    │         modifier = QuickReturnHeaderCoordinator.nestedScrollModifier,
-   │         bottomBar = AppBottomNav(bottomNavSpec)
+   │         bottomBar = {
+   │           MiniPlayer(...)
+   │           if (bottomNavSpec.visible) AppBottomNav(bottomNavSpec.items)
+   │         }
    │       ) { innerPadding ->
    │
    │       └─ ChromeLayoutHost (Box layering for header overlay + content)
@@ -99,9 +116,13 @@ AppRoot
    │               │          ├─ TopRoute
    │               │          │   └─ TopScreenContent (Insets禁止)
    │               │          │       └─ PrimaryVerticalScrollContainer (single vertical)
-   │               │          └─ LibraryRoute
+   │               │          ├─ LibraryRoute
    │               │              └─ LibraryScreenContent (Insets禁止)
    │               │                  └─ PrimaryVerticalScrollContainer (single vertical)
+   │               │          ├─ AlbumDetailRoute (Primary扱い)
+   │               │          ├─ SearchRoute (NonPrimary, BottomNav visible)
+   │               │          ├─ SettingsRoute (NonPrimary)
+   │               │          └─ SmbBrowserRoute (temporary: BottomNav visible)
    │               │
    │               └─ HeaderOverlayLayer  ★KEY: header moves but does not steal scroll
    │                   └─ QuickReturnHeaderContainer (ONE moving unit)
@@ -116,7 +137,7 @@ AppRoot
    │                       │        windowInsets = WindowInsets(0),
    │                       │      )
    │                       │      ├─ title: "Top" | "Library"
-   │                       │      └─ actions: IconButton(Settings)
+   │                       │      └─ actions: IconButton(Search), IconButton(Settings)
    │                       └─ HeaderAccessoryStackSlot (route依存)
    │                           ├─ (Top)     : none
    │                           └─ (Library) : Column
@@ -160,6 +181,7 @@ AppRoot
 ### R1. Insets: Root only
 - Root以外の `statusBarsPadding/systemBarsPadding/windowInsetsPadding` を禁止
 - `TopAppBar/NavigationBar` は `windowInsets = WindowInsets(0)` 固定（共通コンポーネント経由のみ）
+- 各画面 `Scaffold` は `contentWindowInsets = WindowInsets(0)` を明示（Rootとの二重Insets禁止）
 
 ### R2. Header overlay + dynamic content padding
 - HeaderはContent上に重ねる（Scaffold topBar不使用）
@@ -183,8 +205,11 @@ R6. Overlay behavior
 R7. SystemBar color ownership (edge-to-edge)
 - enableEdgeToEdge は維持する
 - SystemBar制御の責務は MainActivity（enableEdgeToEdge + SystemBarStyle）に限定する
+- `SystemBarStyle.auto` は使用しない（light/dark を明示指定）
 - Theme からの Window 直接制御（status/navigationBarColor, InsetsController）は禁止
 - Insetsの適用責務はRoot（WindowInsets.safeDrawing のみ）に限定する
+- Root は常時不透明の基底面（BaseOpaqueLayer）を持つ
 - 外側領域の描画責務は子（Header/BottomNav 連動レイヤー）に持たせる
 - 実装は「拡張+オフセット」: status/navigation bar分だけ子レイヤーを外へ伸ばして描画する
+- EdgeBackdrop のトーンは route で決定し、Settings は top/bottom とも background に統一する
 - values/themes.xml 側での transparent 指定を禁止（Runtime設定との二重管理禁止）

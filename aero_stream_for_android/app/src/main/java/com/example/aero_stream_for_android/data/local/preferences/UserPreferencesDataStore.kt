@@ -31,6 +31,7 @@ class UserPreferencesDataStore @Inject constructor(
     private object Keys {
         val AUDIO_ENGINE = stringPreferencesKey("audio_engine")
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val RECENT_SEARCHES_JSON = stringPreferencesKey("recent_searches_json")
         val SMB_CONFIGS_JSON = stringPreferencesKey("smb_configs_json")
         val SELECTED_SMB_CONFIG_ID = stringPreferencesKey("selected_smb_config_id")
         val SELECTED_SMB_LIBRARY_BUCKETS_JSON = stringPreferencesKey("selected_smb_library_buckets_json")
@@ -67,6 +68,28 @@ class UserPreferencesDataStore @Inject constructor(
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.THEME_MODE] = mode
+        }
+    }
+
+    val recentSearches: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        decodeRecentSearches(prefs[Keys.RECENT_SEARCHES_JSON])
+    }
+
+    suspend fun saveRecentSearch(query: String, maxCount: Int = 10) {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isBlank()) return
+
+        context.dataStore.edit { prefs ->
+            val current = decodeRecentSearches(prefs[Keys.RECENT_SEARCHES_JSON])
+            val deduplicated = current.filterNot { it.equals(normalizedQuery, ignoreCase = true) }
+            val updated = listOf(normalizedQuery) + deduplicated
+            prefs[Keys.RECENT_SEARCHES_JSON] = encodeRecentSearches(updated.take(maxCount))
+        }
+    }
+
+    suspend fun clearRecentSearches() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.RECENT_SEARCHES_JSON)
         }
     }
 
@@ -338,5 +361,26 @@ class UserPreferencesDataStore @Inject constructor(
                 }
             }
         }.getOrDefault(emptyMap())
+    }
+
+    private fun encodeRecentSearches(queries: List<String>): String {
+        val array = JSONArray()
+        queries.forEach { query ->
+            array.put(query)
+        }
+        return array.toString()
+    }
+
+    private fun decodeRecentSearches(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val value = array.optString(index).trim()
+                    if (value.isNotBlank()) add(value)
+                }
+            }
+        }.getOrDefault(emptyList())
     }
 }

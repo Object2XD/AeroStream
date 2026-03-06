@@ -23,7 +23,7 @@ data class RootUiState(
     val headerSpec: HeaderSpec = HeaderSpec(
         enabled = true,
         title = "Top",
-        actions = listOf(HeaderAction.Settings)
+        actions = listOf(HeaderAction.Search, HeaderAction.Settings)
     ),
     val quickReturnHeaderState: QuickReturnHeaderState = QuickReturnHeaderState()
 )
@@ -37,14 +37,12 @@ class RootViewModel @Inject constructor() : ViewModel() {
     fun onRouteChanged(route: String?) {
         _uiState.update { state ->
             val appRoute = routeToAppRoute(route)
-            val primaryRoute = when (appRoute) {
-                TopRoute -> RootPrimaryRoute.Top
-                LibraryRoute, is AlbumDetailRoute, SmbBrowserRoute -> RootPrimaryRoute.Library
-                else -> null
-            }
             state.copy(
                 currentRoute = route,
-                bottomNavSpec = BottomNavSpec(visible = true, selected = primaryRoute),
+                bottomNavSpec = BottomNavSpec(
+                    visible = appRoute.isBottomNavVisible(),
+                    selected = appRoute.toBottomNavSelectedPrimaryRoute()
+                ),
                 headerSpec = buildHeaderSpec(route, state.libraryFeatureState),
                 quickReturnHeaderState = if (route == Screen.Home.route || route == Screen.Library.route) {
                     state.quickReturnHeaderState.clampOffset()
@@ -143,13 +141,13 @@ class RootViewModel @Inject constructor() : ViewModel() {
             Screen.Home.route -> HeaderSpec(
                 enabled = true,
                 title = "Top",
-                actions = listOf(HeaderAction.Settings)
+                actions = listOf(HeaderAction.Search, HeaderAction.Settings)
             )
 
             Screen.Library.route -> HeaderSpec(
                 enabled = true,
                 title = "Library",
-                actions = listOf(HeaderAction.Settings),
+                actions = listOf(HeaderAction.Search, HeaderAction.Settings),
                 accessory = LibraryAccessorySpec(
                     categories = categoriesForSource(featureState.source),
                     selectedCategory = featureState.category,
