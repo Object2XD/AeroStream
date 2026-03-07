@@ -25,7 +25,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +44,7 @@ import com.example.aero_stream_for_android.domain.model.Artist
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Playlist
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.ui.components.AeroTextInput
 import com.example.aero_stream_for_android.ui.components.SongListItem
 import com.example.aero_stream_for_android.ui.library.LibraryCategory
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
@@ -157,11 +157,12 @@ fun LocalLibraryContent(
             onDismissRequest = { showCreatePlaylistDialog = false },
             title = { Text("プレイリストを作成") },
             text = {
-                OutlinedTextField(
+                AeroTextInput(
                     value = playlistName,
                     onValueChange = { playlistName = it },
                     label = { Text("プレイリスト名") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {

@@ -9,7 +9,10 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -115,22 +118,30 @@ fun MiniPlayer(
             }
 
             // 再生/一時停止ボタン
-            IconButton(onClick = onPlayPause) {
-                Icon(
-                    imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
+            AeroIconActionButton(
+                onClick = onPlayPause,
+                contentDescription = if (playerState.isPlaying) "Pause" else "Play",
+                icon = {
+                    Icon(
+                        imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            )
 
             // 次の曲ボタン
-            IconButton(onClick = onSkipNext) {
-                Icon(
-                    Icons.Default.SkipNext,
-                    contentDescription = "Next",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
+            AeroIconActionButton(
+                onClick = onSkipNext,
+                contentDescription = "Next",
+                icon = {
+                    Icon(
+                        Icons.Default.SkipNext,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            )
         }
     }
 }

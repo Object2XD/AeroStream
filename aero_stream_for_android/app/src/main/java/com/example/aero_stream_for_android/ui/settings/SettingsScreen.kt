@@ -48,9 +48,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -81,6 +79,11 @@ import com.example.aero_stream_for_android.data.remote.smb.normalizeSmbRootPath
 import com.example.aero_stream_for_android.data.remote.smb.validateSmbRootPathInput
 import com.example.aero_stream_for_android.domain.model.AudioEngine
 import com.example.aero_stream_for_android.domain.model.SmbConfig
+import com.example.aero_stream_for_android.ui.components.AeroModalSheet
+import com.example.aero_stream_for_android.ui.components.AeroSheetScaffold
+import com.example.aero_stream_for_android.ui.components.AeroSheetSectionTitle
+import com.example.aero_stream_for_android.ui.components.AeroSingleChoiceOptionRow
+import com.example.aero_stream_for_android.ui.components.AeroTextInput
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -405,132 +408,125 @@ private fun SmbServerCard(
         rootPathLabel?.let { append(" $it") }
     }
 
-    Surface(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f)
+            .padding(horizontal = 16.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .clickable(onClick = onSelect)
-                    .semantics(mergeDescendants = true) {
-                        role = Role.Button
-                        contentDescription = topDescription
-                        stateDescription = if (isSelected) "選択中" else "未選択"
-                    }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(36.dp)
-                        .testTag("smb_${config.id}_status_icon"),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Icon(
-                        imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Storage,
-                        contentDescription = null
-                    )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .clickable(onClick = onSelect)
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    contentDescription = topDescription
+                    stateDescription = if (isSelected) "選択中" else "未選択"
                 }
+                .padding(horizontal = 4.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .testTag("smb_${config.id}_status_icon"),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Icon(
+                    imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Storage,
+                    contentDescription = null
+                )
+            }
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp)
-                ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+            ) {
+                Text(
+                    text = config.displayName.ifBlank { "SMB" },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.testTag("smb_${config.id}_title")
+                )
+                Text(
+                    text = hostShare,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                rootPathLabel?.let { root ->
                     Text(
-                        text = config.displayName.ifBlank { "SMB" },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.testTag("smb_${config.id}_title")
-                    )
-                    Text(
-                        text = hostShare,
+                        text = root,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodySmall
                     )
-                    rootPathLabel?.let { root ->
-                        Text(
-                            text = root,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .width(58.dp)
-                        .testTag("smb_${config.id}_top_anchor"),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    if (isSelected) {
-                        Text(
-                            text = "選択中",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
                 }
             }
 
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
-            )
-
-            Row(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .width(58.dp)
+                    .testTag("smb_${config.id}_top_anchor"),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                SmbActionButton(
-                    modifier = Modifier.weight(1f),
-                    icon = { Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    contentDescription = "更新: ${config.displayName}",
-                    onClick = onRefresh
-                )
-                SmbActionButton(
-                    modifier = Modifier.weight(1f),
-                    icon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    contentDescription = "Browse: ${config.displayName}",
-                    onClick = onBrowse
-                )
-                SmbActionButton(
-                    modifier = Modifier.weight(1f),
-                    icon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    contentDescription = "編集: ${config.displayName}",
-                    onClick = onEdit
-                )
-                OutlinedButton(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .semantics {
-                            contentDescription = "削除: ${config.displayName}"
-                        },
-                    onClick = onDelete
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.error
+                if (isSelected) {
+                    Text(
+                        text = "選択中",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
         }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SmbActionButton(
+                modifier = Modifier.weight(1f),
+                icon = { Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                contentDescription = "更新: ${config.displayName}",
+                onClick = onRefresh
+            )
+            SmbActionButton(
+                modifier = Modifier.weight(1f),
+                icon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                contentDescription = "Browse: ${config.displayName}",
+                onClick = onBrowse
+            )
+            SmbActionButton(
+                modifier = Modifier.weight(1f),
+                icon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                contentDescription = "編集: ${config.displayName}",
+                onClick = onEdit
+            )
+            OutlinedButton(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .semantics {
+                        contentDescription = "削除: ${config.displayName}"
+                    },
+                onClick = onDelete
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f))
     }
 }
 
@@ -560,68 +556,20 @@ private fun SettingsOptionsSheet(
     options: List<SettingsOptionItem>,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = null
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 24.dp)
+    AeroModalSheet(onDismissRequest = onDismiss) {
+        AeroSheetScaffold(
+            title = title,
+            onDismiss = onDismiss
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = AeroCompactUiTokens.sortLabelTextStyle()
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f))
-            Spacer(modifier = Modifier.height(10.dp))
-
+            AeroSheetSectionTitle(text = "選択")
             options.forEach { option ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = option.onClick)
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier.width(28.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        if (option.selected) {
-                            Icon(
-                                Icons.Default.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                    Text(
-                        text = option.label,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = if (option.selected) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
+                AeroSingleChoiceOptionRow(
+                    label = option.label,
+                    selected = option.selected,
+                    onClick = option.onClick,
+                    contentDescription = "$title: ${option.label}"
+                )
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
@@ -700,19 +648,17 @@ private fun SmbConfigEditorSheet(
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 32.dp)
             ) {
                 item {
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = displayName,
                         onValueChange = { displayName = it },
                         label = { Text("表示名") },
-                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = hostname,
                         onValueChange = { hostname = it },
                         label = { Text("ホスト名またはIPアドレス") },
-                        singleLine = true,
                         placeholder = { Text("192.168.1.10 / nas.example.localdomain") },
                         supportingText = {
                             Column {
@@ -723,31 +669,28 @@ private fun SmbConfigEditorSheet(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = port,
                         onValueChange = { port = it },
                         label = { Text("ポート") },
-                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = shareName,
                         onValueChange = { shareName = it },
                         label = { Text("共有名") },
-                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = rootPath,
                         onValueChange = {
                             rootPath = it
                             rootPathError = null
                         },
                         label = { Text("開始フォルダ（任意）") },
-                        singleLine = true,
                         isError = rootPathError != null,
                         placeholder = { Text("music/anime") },
                         supportingText = {
@@ -764,19 +707,17 @@ private fun SmbConfigEditorSheet(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = username,
                         onValueChange = { username = it },
                         label = { Text("ユーザー名（任意）") },
-                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("パスワード（任意）") },
-                        singleLine = true,
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { showPassword = !showPassword }) {
@@ -789,11 +730,10 @@ private fun SmbConfigEditorSheet(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    AeroTextInput(
                         value = domain,
                         onValueChange = { domain = it },
                         label = { Text("ドメイン（任意）") },
-                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))

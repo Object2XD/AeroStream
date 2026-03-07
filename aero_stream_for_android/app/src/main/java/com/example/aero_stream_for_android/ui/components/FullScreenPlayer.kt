@@ -6,7 +6,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,13 +59,17 @@ fun FullScreenPlayer(
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onCollapse) {
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Collapse",
-                    tint = White
-                )
-            }
+            AeroIconActionButton(
+                onClick = onCollapse,
+                contentDescription = "Collapse",
+                icon = {
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = White
+                    )
+                }
+            )
             Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = "再生中",
@@ -70,13 +79,17 @@ fun FullScreenPlayer(
             Spacer(modifier = Modifier.weight(1f))
             // SMBソースの場合、ダウンロードボタンを表示
             if (song.source == MusicSource.SMB && onDownload != null) {
-                IconButton(onClick = onDownload) {
-                    Icon(
-                        Icons.Default.Download,
-                        contentDescription = "Download",
-                        tint = White
-                    )
-                }
+                AeroIconActionButton(
+                    onClick = onDownload,
+                    contentDescription = "Download",
+                    icon = {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = null,
+                            tint = White
+                        )
+                    }
+                )
             } else {
                 Spacer(modifier = Modifier.size(48.dp))
             }
@@ -191,70 +204,84 @@ fun FullScreenPlayer(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // シャッフル
-            IconButton(onClick = onShuffleToggle) {
-                Icon(
-                    Icons.Default.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = if (playerState.isShuffleEnabled) AccentRed else LightGray,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
+            AeroIconActionButton(
+                onClick = onShuffleToggle,
+                contentDescription = "Shuffle",
+                icon = {
+                    Icon(
+                        Icons.Default.Shuffle,
+                        contentDescription = null,
+                        tint = if (playerState.isShuffleEnabled) AccentRed else LightGray,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            )
 
             // 前の曲
-            IconButton(
+            AeroIconActionButton(
                 onClick = onSkipPrevious,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    Icons.Default.SkipPrevious,
-                    contentDescription = "Previous",
-                    tint = White,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+                contentDescription = "Previous",
+                modifier = Modifier.size(48.dp),
+                icon = {
+                    Icon(
+                        Icons.Default.SkipPrevious,
+                        contentDescription = null,
+                        tint = White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            )
 
             // 再生/一時停止
-            FilledIconButton(
+            AeroIconActionButton(
                 onClick = onPlayPause,
                 modifier = Modifier.size(64.dp),
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledIconButtonColors(
+                style = AeroIconActionStyle.Filled,
+                filledColors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = White,
                     contentColor = Black
-                )
-            ) {
-                Icon(
-                    imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+                ),
+                contentDescription = if (playerState.isPlaying) "Pause" else "Play",
+                icon = {
+                    Icon(
+                        imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            )
 
             // 次の曲
-            IconButton(
+            AeroIconActionButton(
                 onClick = onSkipNext,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    Icons.Default.SkipNext,
-                    contentDescription = "Next",
-                    tint = White,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+                contentDescription = "Next",
+                modifier = Modifier.size(48.dp),
+                icon = {
+                    Icon(
+                        Icons.Default.SkipNext,
+                        contentDescription = null,
+                        tint = White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            )
 
             // リピート
-            IconButton(onClick = onRepeatModeChange) {
-                Icon(
-                    imageVector = when (playerState.repeatMode) {
-                        RepeatMode.ONE -> Icons.Default.RepeatOne
-                        else -> Icons.Default.Repeat
-                    },
-                    contentDescription = "Repeat",
-                    tint = if (playerState.repeatMode != RepeatMode.OFF) AccentRed else LightGray,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
+            AeroIconActionButton(
+                onClick = onRepeatModeChange,
+                contentDescription = "Repeat",
+                icon = {
+                    Icon(
+                        imageVector = when (playerState.repeatMode) {
+                            RepeatMode.ONE -> Icons.Default.RepeatOne
+                            else -> Icons.Default.Repeat
+                        },
+                        contentDescription = null,
+                        tint = if (playerState.repeatMode != RepeatMode.OFF) AccentRed else LightGray,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            )
         }
 
         Spacer(modifier = Modifier.weight(1f))

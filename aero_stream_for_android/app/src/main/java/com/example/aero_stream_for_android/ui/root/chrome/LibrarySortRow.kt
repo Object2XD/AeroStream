@@ -1,23 +1,18 @@
 package com.example.aero_stream_for_android.ui.root.chrome
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.example.aero_stream_for_android.ui.library.LibrarySort
 import com.example.aero_stream_for_android.ui.library.LibrarySortKey
 import com.example.aero_stream_for_android.ui.library.SortOrder
+import com.example.aero_stream_for_android.ui.components.AeroActionChip
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 
 @Composable
@@ -36,17 +31,11 @@ fun LibrarySortRow(
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.clickable(onClick = onOpenSortPicker),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = sort.label(),
-                style = AeroCompactUiTokens.sortLabelTextStyle()
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
-        }
+        AeroActionChip(
+            label = sort.label(),
+            onClick = onOpenSortPicker,
+            trailingIcon = { androidx.compose.material3.Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) }
+        )
     }
 }
 

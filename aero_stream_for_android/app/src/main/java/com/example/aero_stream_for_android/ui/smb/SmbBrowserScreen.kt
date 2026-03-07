@@ -1,7 +1,6 @@
 package com.example.aero_stream_for_android.ui.smb
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,7 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.aero_stream_for_android.ui.components.formatDuration
+import com.example.aero_stream_for_android.ui.components.AeroEmptyState
+import com.example.aero_stream_for_android.ui.components.AeroIconActionButton
+import com.example.aero_stream_for_android.ui.components.AeroListRow
+import com.example.aero_stream_for_android.ui.components.AeroPrimaryActionButton
+import com.example.aero_stream_for_android.ui.components.AeroTopBar
+import com.example.aero_stream_for_android.ui.components.AeroTopBarSearch
 import com.example.aero_stream_for_android.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,74 +49,46 @@ fun SmbBrowserScreen(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(
-                        start = AeroCompactUiTokens.screenHorizontalPadding,
-                        end = AeroCompactUiTokens.screenHorizontalPadding,
-                        top = AeroCompactUiTokens.headerTopPadding,
-                        bottom = AeroCompactUiTokens.headerBottomPadding
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (uiState.pathHistory.size > 1) {
-                    IconButton(onClick = { viewModel.navigateUp() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-
-                if (isSearchMode) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        singleLine = true,
-                        placeholder = { Text("現在のフォルダを検索") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
-                                }
+            if (isSearchMode) {
+                AeroTopBarSearch(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholderText = "現在のフォルダを検索",
+                    onNavigateBack = ::closeSearch,
+                    modifier = Modifier.background(MaterialTheme.colorScheme.background),
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
                             }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("SMBブラウザ", style = AeroCompactUiTokens.topAppBarTitleTextStyle())
-                        if (uiState.currentPath.isNotEmpty()) {
-                            Text(
-                                text = uiState.currentPath,
-                                style = AeroCompactUiTokens.headerTertiaryTextStyle(),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = {
-                    if (isSearchMode) closeSearch() else isSearchMode = true
-                }) {
-                    Icon(
-                        if (isSearchMode) Icons.Default.Close else Icons.Default.Search,
-                        contentDescription = if (isSearchMode) "Close search" else "Search"
-                    )
-                }
-                Icon(
-                    imageVector = if (uiState.isConnected) Icons.Default.Cloud else Icons.Default.CloudOff,
-                    contentDescription = "Connection status",
-                    tint = if (uiState.isConnected) {
-                        MaterialTheme.colorScheme.onSurface
+                )
+            } else {
+                AeroTopBar(
+                    title = "SMBブラウザ",
+                    subtitle = uiState.currentPath.takeIf { it.isNotBlank() },
+                    onNavigateBack = if (uiState.pathHistory.size > 1) {
+                        { viewModel.navigateUp() }
                     } else {
-                        MaterialTheme.colorScheme.error
+                        null
+                    },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.background),
+                    actions = {
+                        AeroIconActionButton(
+                            onClick = { isSearchMode = true },
+                            contentDescription = "検索",
+                            icon = { Icon(Icons.Default.Search, contentDescription = null) }
+                        )
+                        Icon(
+                            imageVector = if (uiState.isConnected) Icons.Default.Cloud else Icons.Default.CloudOff,
+                            contentDescription = "Connection status",
+                            tint = if (uiState.isConnected) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
                     }
                 )
             }
@@ -127,26 +103,11 @@ fun SmbBrowserScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.SettingsEthernet,
-                            contentDescription = null,
-                            modifier = Modifier.size(AeroCompactUiTokens.emptyStateIconSize),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "SMBサーバーが設定されていません",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "設定画面からSMBサーバーを設定してください",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    AeroEmptyState(
+                        title = "SMBサーバーが設定されていません",
+                        description = "設定画面からSMBサーバーを設定してください",
+                        icon = Icons.Default.SettingsEthernet
+                    )
                 }
             }
 
@@ -169,22 +130,16 @@ fun SmbBrowserScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.ErrorOutline,
-                            contentDescription = null,
-                            modifier = Modifier.size(AeroCompactUiTokens.emptyStateIconSize),
-                            tint = MaterialTheme.colorScheme.error
+                        AeroEmptyState(
+                            title = uiState.error!!,
+                            icon = Icons.Default.ErrorOutline,
+                            iconTint = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = uiState.error!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
+                        AeroPrimaryActionButton(
+                            text = "再試行",
+                            onClick = { viewModel.browseTo(uiState.currentPath) }
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.browseTo(uiState.currentPath) }) {
-                            Text("再試行")
-                        }
                     }
                 }
             }
@@ -200,34 +155,25 @@ fun SmbBrowserScreen(
                     // ディレクトリ
                     if (listing != null) {
                         items(filteredDirectories) { dir ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.browseTo(dir.path) }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Folder,
-                                    contentDescription = "Folder",
-                                    tint = SmbSourceColor,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                                Text(
-                                    text = dir.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 12.dp),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            AeroListRow(
+                                title = dir.name,
+                                onClick = { viewModel.browseTo(dir.path) },
+                                leading = {
+                                    Icon(
+                                        Icons.Default.Folder,
+                                        contentDescription = "Folder",
+                                        tint = SmbSourceColor,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                },
+                                trailing = {
+                                    Icon(
+                                        Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
                         }
 
                         // 音楽ファイル
@@ -253,44 +199,32 @@ fun SmbBrowserScreen(
                         }
 
                         items(filteredAudioFiles) { file ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.playSmbFile(file) }
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.MusicNote,
-                                    contentDescription = "Music",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 12.dp)
-                                ) {
-                                    Text(
-                                        text = file.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = formatFileSize(file.size),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                IconButton(onClick = { viewModel.downloadFile(file) }) {
+                            AeroListRow(
+                                title = file.name,
+                                subtitle = formatFileSize(file.size),
+                                onClick = { viewModel.playSmbFile(file) },
+                                leading = {
                                     Icon(
-                                        Icons.Default.Download,
-                                        contentDescription = "Download",
-                                        tint = DownloadSourceColor
+                                        Icons.Default.MusicNote,
+                                        contentDescription = "Music",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                },
+                                trailing = {
+                                    AeroIconActionButton(
+                                        onClick = { viewModel.downloadFile(file) },
+                                        contentDescription = "ダウンロード",
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.Download,
+                                                contentDescription = null,
+                                                tint = DownloadSourceColor
+                                            )
+                                        }
                                     )
                                 }
-                            }
+                            )
                         }
 
                         // 空のディレクトリ

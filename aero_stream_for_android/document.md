@@ -227,3 +227,9 @@ R7. SystemBar color ownership (edge-to-edge)
 - 実装は「拡張+オフセット」: status/navigation bar分だけ子レイヤーを外へ伸ばして描画する
 - EdgeBackdrop のトーンは route で決定し、Settings は top/bottom とも background に統一する
 - values/themes.xml 側での transparent 指定を禁止（Runtime設定との二重管理禁止）
+
+---
+
+## 関連文書
+
+- UIデザイン方針は `design.md` を参照

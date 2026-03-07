@@ -33,10 +33,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -63,6 +61,8 @@ import android.widget.Toast
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.PlayerState
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.ui.components.AeroIconActionButton
+import com.example.aero_stream_for_android.ui.components.AeroIconActionStyle
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import kotlinx.coroutines.flow.collectLatest
@@ -211,13 +211,16 @@ private fun AlbumDetailTopOverlay(
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onNavigateBack) {
+            AeroIconActionButton(
+                onClick = onNavigateBack,
+                contentDescription = "Back",
+                icon = {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = null,
                     modifier = Modifier.size(AeroCompactUiTokens.headerActionIconSize)
                 )
-            }
+            })
 
             Box(
                 modifier = Modifier.weight(1f),
@@ -254,13 +257,16 @@ private fun AlbumDetailTopOverlay(
                 )
             }
 
-            IconButton(onClick = { }) {
+            AeroIconActionButton(
+                onClick = { },
+                contentDescription = "Queue",
+                icon = {
                 Icon(
                     Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = "Queue",
+                    contentDescription = null,
                     modifier = Modifier.size(AeroCompactUiTokens.headerActionIconSize)
                 )
-            }
+            })
         }
 
         HorizontalDivider(
@@ -374,21 +380,23 @@ private fun AlbumActionRow(
         )
         AlbumSecondaryActionButton(icon = Icons.Default.Bookmark, label = "Bookmark")
 
-        FilledIconButton(
+        AeroIconActionButton(
             onClick = onPlay,
             modifier = Modifier.size(AeroCompactUiTokens.albumDetailPrimaryPlayButtonSize),
-            shape = CircleShape,
-            colors = IconButtonDefaults.filledIconButtonColors(
+            style = AeroIconActionStyle.Filled,
+            filledColors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.onSurface,
                 contentColor = MaterialTheme.colorScheme.surface
-            )
-        ) {
-            Icon(
-                Icons.Default.PlayArrow,
-                contentDescription = "Play",
-                modifier = Modifier.size(34.dp)
-            )
-        }
+            ),
+            contentDescription = "Play",
+            icon = {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(34.dp)
+                )
+            }
+        )
 
         AlbumSecondaryActionButton(icon = Icons.Default.Share, label = "Share")
         AlbumSecondaryActionButton(icon = Icons.Default.MoreVert, label = "More")
@@ -407,9 +415,14 @@ private fun AlbumSecondaryActionButton(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
     ) {
-        IconButton(onClick = onClick, enabled = enabled) {
-            Icon(icon, contentDescription = label)
-        }
+        AeroIconActionButton(
+            onClick = onClick,
+            enabled = enabled,
+            contentDescription = label,
+            icon = {
+                Icon(icon, contentDescription = null)
+            }
+        )
     }
 }
 
@@ -526,9 +539,11 @@ private fun AlbumTrackRow(
             }
         }
 
-        IconButton(onClick = { }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "More")
-        }
+        AeroIconActionButton(
+            onClick = { },
+            contentDescription = "More",
+            icon = { Icon(Icons.Default.MoreVert, contentDescription = null) }
+        )
     }
 }
 
@@ -566,21 +581,23 @@ private fun AlbumBottomPlayShortcut(
             ),
         horizontalArrangement = Arrangement.End
     ) {
-        FilledIconButton(
+        AeroIconActionButton(
             onClick = onPlay,
             modifier = Modifier.size(AeroCompactUiTokens.albumDetailFloatingPlayButtonSize),
-            shape = CircleShape,
-            colors = IconButtonDefaults.filledIconButtonColors(
+            style = AeroIconActionStyle.Filled,
+            filledColors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.onSurface,
                 contentColor = MaterialTheme.colorScheme.surface
-            )
-        ) {
-            Icon(
-                Icons.Default.PlayArrow,
-                contentDescription = "Play album",
-                modifier = Modifier.size(34.dp)
-            )
-        }
+            ),
+            contentDescription = "Play album",
+            icon = {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(34.dp)
+                )
+            }
+        )
     }
 }
 

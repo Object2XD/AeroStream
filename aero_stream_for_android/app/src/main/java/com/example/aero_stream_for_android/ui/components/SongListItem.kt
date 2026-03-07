@@ -34,11 +34,11 @@ fun SongListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .padding(
-                horizontal = AeroCompactUiTokens.screenHorizontalPadding,
-                vertical = AeroCompactUiTokens.listRowVerticalPadding
-            ),
+                horizontal = 16.dp,
+                vertical = 8.dp
+            )
+            .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // アルバムアート

@@ -10,16 +10,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -28,9 +25,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,14 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.aero_stream_for_android.ui.components.AeroActionChip
+import com.example.aero_stream_for_android.ui.components.AeroTopBarSearch
 import com.example.aero_stream_for_android.ui.components.SongListItem
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
-import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,60 +62,22 @@ fun SearchScreen(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(
-                        start = AeroCompactUiTokens.screenHorizontalPadding,
-                        end = AeroCompactUiTokens.screenHorizontalPadding,
-                        top = AeroCompactUiTokens.headerTopPadding,
-                        bottom = AeroCompactUiTokens.headerBottomPadding
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-                TextField(
-                    value = uiState.query,
-                    onValueChange = searchViewModel::onQueryChanged,
-                    singleLine = true,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent
-                    ),
-                    placeholder = {
-                        Text(
-                            text = "曲名、アーティスト、アルバムを検索",
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
-                    },
-                    trailingIcon = {
-                        if (uiState.query.isNotEmpty()) {
-                            IconButton(onClick = searchViewModel::clearSearch) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
-                            }
+            AeroTopBarSearch(
+                value = uiState.query,
+                onValueChange = searchViewModel::onQueryChanged,
+                placeholderText = "曲名、アーティスト、アルバムを検索",
+                onNavigateBack = onNavigateBack,
+                trailingIcon = {
+                    if (uiState.query.isNotEmpty()) {
+                        IconButton(onClick = searchViewModel::clearSearch) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear")
                         }
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 52.dp)
-                        .focusRequester(focusRequester),
-                    textStyle = AeroCompactUiTokens.rowSubtitleTextStyle()
-                )
-            }
+                    }
+                },
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.background)
+                    .focusRequester(focusRequester)
+            )
         }
     ) { paddingValues ->
         when {
@@ -157,9 +112,10 @@ fun SearchScreen(
                                 style = MaterialTheme.typography.titleMedium
                             )
                             if (uiState.recentSearches.isNotEmpty()) {
-                                TextButton(onClick = searchViewModel::clearRecentSearches) {
-                                    Text("履歴を消去")
-                                }
+                                AeroActionChip(
+                                    label = "履歴を消去",
+                                    onClick = searchViewModel::clearRecentSearches
+                                )
                             }
                         }
                     }
@@ -178,8 +134,11 @@ fun SearchScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { searchViewModel.onRecentSearchSelected(query) }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 12.dp
+                                    )
+                                    .clickable { searchViewModel.onRecentSearchSelected(query) },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -187,10 +146,12 @@ fun SearchScreen(
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.width(14.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     text = query,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))

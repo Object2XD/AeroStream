@@ -49,6 +49,27 @@ object AeroCompactUiTokens {
     // val bottomNavHeight = 64.dp
     val bottomNavHeight = 78.dp
     val bottomNavIconSize = 24.dp
+    val cardCornerRadius = 14.dp
+    val cardOuterHorizontalPadding = 16.dp
+    val cardOuterVerticalPadding = 4.dp
+    val cardContentHorizontalPadding = 12.dp
+    val cardContentVerticalPadding = 10.dp
+    val cardContentSpacing = 8.dp
+    val chipActionMinHeight = 48.dp
+    val chipIconSize = 20.dp
+    val bottomCardHeaderHorizontalPadding = 20.dp
+    val bottomCardHeaderVerticalPadding = 12.dp
+    val bottomCardBodyTopPadding = 10.dp
+    val bottomCardBodyBottomPadding = 24.dp
+    val bottomCardSectionGap = 10.dp
+    val bottomCardSectionTitleTopPadding = 14.dp
+    val bottomCardSectionTitleBottomPadding = 8.dp
+    val bottomCardOptionHorizontalPadding = 20.dp
+    val bottomCardOptionVerticalPadding = 6.dp
+    val bottomCardOptionCornerRadius = 14.dp
+    val bottomCardOptionMinHeight = 52.dp
+    val bottomCardOptionInnerHorizontalPadding = 14.dp
+    val bottomCardOptionInnerVerticalPadding = 14.dp
 
     @Composable
     fun headerPrimaryTextStyle(): TextStyle {
@@ -148,5 +169,10 @@ object AeroCompactUiTokens {
     @Composable
     fun bottomNavLabelTextStyle(): TextStyle {
         return MaterialTheme.typography.labelMedium
+    }
+
+    @Composable
+    fun cardContainerColor(): Color {
+        return MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f)
     }
 }
