@@ -53,6 +53,24 @@
 
 - 通常のフラットリストの標準行として使用
 - アイコン + テキスト + 右アクションを基本構成とする
+- 行タップを持つ場合、`Modifier` の順序は原則 `clickable -> padding` とする
+  - 目的: 見た目の余白を含めてタップ可能領域を確保し、画面間のタップ感を統一する
+  - 例外: 子要素が独立した操作部品（`IconButton` など）を持つ場合、子のタップ優先は許容する
+
+### `SongListItem`
+
+- 曲行は原則 `SongListItem` を共通利用する
+- 画面差分は `SongListItemStyle` で吸収する（コンポーネント分割を増やさない）
+- `Local files` の曲行は `CompactNoBadge` を標準とし、クラウド/チェックを表示しない
+- SMB/Cache など状態提示が必要な画面は `WithStatusBadge` を使う
+
+### Album row status badge
+
+- アルバム行の状態バッジは `Album` の集計状態（`isFullyCached`）を利用する
+- SMBアルバムでは状態バッジを表示する
+  - 全曲キャッシュ済み: チェック
+  - 未キャッシュ曲あり: クラウド
+- Localアルバムでは状態バッジを表示しない（余白も詰める）
 
 ## Screen-specific Guidelines
 

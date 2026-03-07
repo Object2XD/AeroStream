@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -33,6 +35,7 @@ import com.example.aero_stream_for_android.domain.model.Artist
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.ui.components.SongListItem
+import com.example.aero_stream_for_android.ui.components.SongListItemStyle
 import com.example.aero_stream_for_android.ui.library.LibraryCategory
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.library.LibrarySortKey
@@ -87,13 +90,19 @@ fun SmbLibraryContent(
                             item { EmptyState("曲はまだありません") }
                         } else {
                             items(songs) { song ->
+                                if (song.duration == 0L || song.albumArtUri == null) {
+                                    androidx.compose.runtime.LaunchedEffect(song.id, song.sourceUpdatedAt) {
+                                        viewModel.requestMetadataExtraction(song)
+                                    }
+                                }
                                 SongListItem(
                                     song = song,
                                     onClick = {
                                         playerViewModel.playQueue(songs, songs.indexOf(song))
                                         onNavigateToPlayer()
                                     },
-                                    isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying
+                                    isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
+                                    style = SongListItemStyle.WithStatusBadge
                                 )
                             }
                         }
@@ -108,6 +117,7 @@ fun SmbLibraryContent(
                             items(albums) { album ->
                                 SmbAlbumRow(
                                     album = album,
+                                    showStatusBadge = true,
                                     onClick = {
                                         onNavigateToAlbumDetail(album, MusicSource.SMB, uiState.selectedSmbConfig?.id)
                                     }
@@ -138,6 +148,7 @@ fun SmbLibraryContent(
 @Composable
 private fun SmbAlbumRow(
     album: Album,
+    showStatusBadge: Boolean,
     onClick: () -> Unit
 ) {
     Row(
@@ -154,11 +165,17 @@ private fun SmbAlbumRow(
                 .padding(start = 12.dp)
         ) {
             Text(text = album.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                text = "アルバム・${album.artist}・${album.songCount}曲",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (showStatusBadge) {
+                    AlbumCacheBadge(isFullyCached = album.isFullyCached)
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                    text = "アルバム・${album.artist}・${album.songCount}曲",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

@@ -21,7 +21,7 @@ class LocalMediaDataSource @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
-        private val ALBUM_ART_URI = Uri.parse("content://media/external/audio/albumart")
+        private const val ALBUM_ART_URI = "content://media/external/audio/albumart"
 
         private val AUDIO_EXTENSIONS = setOf(
             "mp3", "m4a", "flac", "ogg", "wav", "aac", "wma", "opus"
@@ -82,7 +82,7 @@ class LocalMediaDataSource @Inject constructor(
                 if (duration < 1000) continue
 
                 val albumId = cursor.getLong(albumIdColumn)
-                val albumArtUri = ContentUris.withAppendedId(ALBUM_ART_URI, albumId)
+                val albumArtUri = ContentUris.withAppendedId(Uri.parse(ALBUM_ART_URI), albumId)
                 val contentUri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id

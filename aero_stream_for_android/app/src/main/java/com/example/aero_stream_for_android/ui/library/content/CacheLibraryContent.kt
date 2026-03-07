@@ -30,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
 import com.example.aero_stream_for_android.ui.components.SongListItem
+import com.example.aero_stream_for_android.ui.components.SongListItemStyle
 import com.example.aero_stream_for_android.ui.downloads.DownloadsViewModel
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
@@ -128,7 +129,8 @@ fun CacheLibraryContent(
                         playerViewModel.playQueue(downloadedSongs, downloadedSongs.indexOf(song))
                         onNavigateToPlayer()
                     },
-                    isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying
+                    isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
+                    style = SongListItemStyle.WithStatusBadge
                 )
             }
         }

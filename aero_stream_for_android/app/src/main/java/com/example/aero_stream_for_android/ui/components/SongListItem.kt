@@ -2,12 +2,28 @@ package com.example.aero_stream_for_android.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,7 +35,14 @@ import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.domain.model.SongCacheStatus
 import com.example.aero_stream_for_android.domain.model.cacheStatus
 import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
-import com.example.aero_stream_for_android.ui.theme.*
+import com.example.aero_stream_for_android.ui.theme.AccentRed
+import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
+import com.example.aero_stream_for_android.ui.theme.Black
+
+enum class SongListItemStyle {
+    WithStatusBadge,
+    CompactNoBadge
+}
 
 /**
  * 楽曲リストのアイテムコンポーネント。
@@ -31,23 +54,24 @@ fun SongListItem(
     onMoreClick: (() -> Unit)? = null,
     isPlaying: Boolean = false,
     showDownloadIcon: Boolean = false,
+    style: SongListItemStyle = SongListItemStyle.WithStatusBadge,
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(
-                horizontal = 16.dp,
-                vertical = 8.dp
-            )
-            .clickable(onClick = onClick),
+                horizontal = AeroCompactUiTokens.screenHorizontalPadding,
+                vertical = AeroCompactUiTokens.listRowVerticalPadding
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // アルバムアート
+        // メディアアート（アルバム行と同じ密度）
         Box(
             modifier = Modifier
-                .size(AeroCompactUiTokens.miniPlayerArtworkSize)
-                .clip(RoundedCornerShape(6.dp))
+                .size(AeroCompactUiTokens.listArtworkSize)
+                .clip(RoundedCornerShape(10.dp))
         ) {
             if (song.albumArtUri != null) {
                 AsyncImage(
@@ -64,9 +88,9 @@ fun SongListItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.MusicNote,
+                        imageVector = Icons.Default.MusicNote,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(AeroCompactUiTokens.listOverflowIconSize),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -81,54 +105,58 @@ fun SongListItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Equalizer,
+                        imageVector = Icons.Default.Equalizer,
                         contentDescription = "Playing",
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(AeroCompactUiTokens.listOverflowIconSize),
                         tint = AccentRed
                     )
                 }
             }
         }
 
-        // 曲情報
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = AeroCompactUiTokens.miniPlayerTextPaddingHorizontal)
+                .padding(
+                    start = 12.dp,
+                    end = AeroCompactUiTokens.listTextEndPadding
+                )
         ) {
             Text(
                 text = song.title,
-                style = AeroCompactUiTokens.rowTitleTextStyle(),
                 color = if (isPlaying) AccentRed else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // ソースバッジ
-                when (song.cacheStatus) {
-                    SongCacheStatus.CACHED -> {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = "Downloaded",
-                            modifier = Modifier.size(10.dp),
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+                if (style == SongListItemStyle.WithStatusBadge) {
+                    when (song.cacheStatus) {
+                        SongCacheStatus.CACHED -> {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Downloaded",
+                                modifier = Modifier.size(AeroCompactUiTokens.statusBadgeIconSize),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+
+                        SongCacheStatus.SMB_NOT_CACHED -> {
+                            Icon(
+                                imageVector = Icons.Default.Cloud,
+                                contentDescription = "SMB",
+                                modifier = Modifier.size(AeroCompactUiTokens.statusBadgeIconSize),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+
+                        SongCacheStatus.NONE -> Unit
                     }
-                    SongCacheStatus.SMB_NOT_CACHED -> {
-                        Icon(
-                            Icons.Default.Cloud,
-                            contentDescription = "SMB",
-                            modifier = Modifier.size(10.dp),
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    SongCacheStatus.NONE -> Unit
                 }
                 Text(
                     text = "${song.artist} · ${formatDuration(song.duration)}",
-                    style = AeroCompactUiTokens.rowSubtitleTextStyle(),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -140,7 +168,7 @@ fun SongListItem(
         if (showDownloadIcon && song.isCacheDownloadEligible) {
             IconButton(onClick = { /* ダウンロード処理 */ }) {
                 Icon(
-                    Icons.Default.Download,
+                    imageVector = Icons.Default.Download,
                     contentDescription = "Download",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(AeroCompactUiTokens.listOverflowIconSize)
@@ -152,7 +180,7 @@ fun SongListItem(
         if (onMoreClick != null) {
             IconButton(onClick = onMoreClick) {
                 Icon(
-                    Icons.Default.MoreVert,
+                    imageVector = Icons.Default.MoreVert,
                     contentDescription = "More options",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(AeroCompactUiTokens.listOverflowIconSize)

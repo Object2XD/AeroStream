@@ -1,11 +1,14 @@
 package com.example.aero_stream_for_android.ui.components
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.unit.dp
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.ui.theme.AeroStreamTheme
@@ -41,6 +44,8 @@ class SongListItemTest {
         }
 
         composeRule.onNodeWithContentDescription("SMB").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("SMB").assertWidthIsEqualTo(14.dp)
+        composeRule.onNodeWithContentDescription("SMB").assertHeightIsEqualTo(14.dp)
         composeRule.onNodeWithContentDescription("Download").assertIsDisplayed()
         composeRule.onAllNodesWithContentDescription("Downloaded").assertCountEquals(0)
     }
@@ -63,13 +68,45 @@ class SongListItemTest {
                 SongListItem(
                     song = song,
                     onClick = {},
-                    showDownloadIcon = true
+                    showDownloadIcon = true,
+                    style = SongListItemStyle.WithStatusBadge
                 )
             }
         }
 
         composeRule.onNodeWithContentDescription("Downloaded").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Downloaded").assertWidthIsEqualTo(14.dp)
+        composeRule.onNodeWithContentDescription("Downloaded").assertHeightIsEqualTo(14.dp)
         composeRule.onAllNodesWithContentDescription("Download").assertCountEquals(0)
         composeRule.onAllNodesWithContentDescription("SMB").assertCountEquals(0)
+    }
+
+    @Test
+    fun songListItem_compactNoBadge_hidesAllStatusBadges() {
+        val song = Song(
+            id = 3L,
+            title = "Compact Song",
+            artist = "Artist",
+            album = "Album",
+            duration = 120_000L,
+            source = MusicSource.SMB,
+            smbPath = "share\\compact.mp3",
+            isCached = false
+        )
+
+        composeRule.setContent {
+            AeroStreamTheme {
+                SongListItem(
+                    song = song,
+                    onClick = {},
+                    showDownloadIcon = true,
+                    style = SongListItemStyle.CompactNoBadge
+                )
+            }
+        }
+
+        composeRule.onAllNodesWithContentDescription("SMB").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("Downloaded").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Download").assertIsDisplayed()
     }
 }

@@ -12,5 +12,7 @@ data class Album(
     val albumArtist: String = "",
     val albumArtUri: Uri? = null,
     val songCount: Int = 0,
-    val year: Int? = null
+    val year: Int? = null,
+    val cachedSongCount: Int = 0,
+    val isFullyCached: Boolean = false
 )

@@ -1,6 +1,7 @@
 package com.example.aero_stream_for_android.data.repository
 
 import android.net.Uri
+import com.example.aero_stream_for_android.data.local.db.dao.AlbumInfo
 import com.example.aero_stream_for_android.data.local.db.dao.SongDao
 import com.example.aero_stream_for_android.data.local.db.entity.SongEntity
 import com.example.aero_stream_for_android.data.local.mediastore.LocalMediaDataSource
@@ -111,42 +112,21 @@ class MusicRepository @Inject constructor(
     fun getAlbums(): Flow<List<Album>> =
         songDao.getAlbums().map { albumInfos ->
             albumInfos.mapIndexed { index, info ->
-                Album(
-                    id = index.toLong(),
-                    name = info.album,
-                    artist = info.albumArtist,
-                    albumArtist = info.albumArtist,
-                    albumArtUri = info.albumArtUri?.let { Uri.parse(it) },
-                    songCount = info.count
-                )
+                info.toAlbum(index)
             }
         }
 
     fun getAlbumsBySource(source: MusicSource): Flow<List<Album>> =
         songDao.getAlbumsBySource(source.name).map { albumInfos ->
             albumInfos.mapIndexed { index, info ->
-                Album(
-                    id = index.toLong(),
-                    name = info.album,
-                    artist = info.albumArtist,
-                    albumArtist = info.albumArtist,
-                    albumArtUri = info.albumArtUri?.let { Uri.parse(it) },
-                    songCount = info.count
-                )
+                info.toAlbum(index)
             }
         }
 
     fun getAlbumsBySourceAndSmbConfig(source: MusicSource, smbConfigId: String): Flow<List<Album>> =
         songDao.getAlbumsBySourceAndSmbConfig(source.name, smbConfigId).map { albumInfos ->
             albumInfos.mapIndexed { index, info ->
-                Album(
-                    id = index.toLong(),
-                    name = info.album,
-                    artist = info.albumArtist,
-                    albumArtist = info.albumArtist,
-                    albumArtUri = info.albumArtUri?.let { Uri.parse(it) },
-                    songCount = info.count
-                )
+                info.toAlbum(index)
             }
         }
 
@@ -157,14 +137,7 @@ class MusicRepository @Inject constructor(
     ): Flow<List<Album>> =
         songDao.getAlbumsBySourceSmbConfigAndBuckets(source.name, smbConfigId, buckets).map { albumInfos ->
             albumInfos.mapIndexed { index, info ->
-                Album(
-                    id = index.toLong(),
-                    name = info.album,
-                    artist = info.albumArtist,
-                    albumArtist = info.albumArtist,
-                    albumArtUri = info.albumArtUri?.let { Uri.parse(it) },
-                    songCount = info.count
-                )
+                info.toAlbum(index)
             }
         }
 
@@ -311,4 +284,19 @@ class MusicRepository @Inject constructor(
         playCount = playCount,
         sourceUpdatedAt = sourceUpdatedAt
     )
+
+    private fun AlbumInfo.toAlbum(index: Int): Album {
+        val total = count
+        val cached = cachedCount
+        return Album(
+            id = index.toLong(),
+            name = album,
+            artist = albumArtist,
+            albumArtist = albumArtist,
+            albumArtUri = albumArtUri?.let { Uri.parse(it) },
+            songCount = total,
+            cachedSongCount = cached,
+            isFullyCached = total > 0 && cached >= total
+        )
+    }
 }

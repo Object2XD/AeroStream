@@ -340,7 +340,7 @@ internal fun AlbumTrackRow(
                 Icon(
                     imageVector = Icons.Default.Download,
                     contentDescription = "Downloading",
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(AeroCompactUiTokens.statusBadgeIconSize),
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             } else {
@@ -371,7 +371,7 @@ internal fun AlbumTrackRow(
                         Icon(
                             Icons.Default.CheckCircle,
                             contentDescription = "Downloaded",
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(AeroCompactUiTokens.statusBadgeIconSize),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(6.dp))
@@ -381,7 +381,7 @@ internal fun AlbumTrackRow(
                         Icon(
                             Icons.Default.CheckCircle,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(AeroCompactUiTokens.statusBadgeIconSize),
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(6.dp))
@@ -391,7 +391,7 @@ internal fun AlbumTrackRow(
                         Icon(
                             Icons.Default.Cloud,
                             contentDescription = "SMB",
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(AeroCompactUiTokens.statusBadgeIconSize),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(6.dp))

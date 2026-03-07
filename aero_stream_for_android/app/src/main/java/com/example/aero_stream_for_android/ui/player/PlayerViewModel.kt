@@ -20,12 +20,19 @@ class PlayerViewModel @Inject constructor(
     private val playerManager: PlayerManager,
     private val musicRepository: MusicRepository,
     private val downloadManager: DownloadManager,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val smbMetadataExtractionQueue: com.example.aero_stream_for_android.data.smb.SmbMetadataExtractionQueue
 ) : ViewModel() {
 
     val playerState: StateFlow<PlayerState> = playerManager.playerState
 
     fun playSong(song: Song) {
+        if (song.duration == 0L || song.albumArtUri == null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
+                smbMetadataExtractionQueue.enqueueExtraction(selectedConfig, song)
+            }
+        }
         playerManager.play(song)
         CoroutineScope(Dispatchers.IO).launch {
             musicRepository.updatePlayStats(song.id)
@@ -33,6 +40,13 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
+        val song = songs.getOrNull(startIndex)
+        if (song != null && (song.duration == 0L || song.albumArtUri == null)) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
+                smbMetadataExtractionQueue.enqueueExtraction(selectedConfig, song)
+            }
+        }
         playerManager.setQueue(songs, startIndex)
     }
 

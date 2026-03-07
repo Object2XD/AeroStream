@@ -25,6 +25,7 @@ object AeroCompactUiTokens {
     val listRowVerticalPadding = 8.dp
     val listTextStartPadding = 12.dp
     val listTextEndPadding = 4.dp
+    val statusBadgeIconSize = 14.dp
     val listOverflowIconSize = 20.dp
     val gridHorizontalSpacing = 16.dp
     val gridVerticalSpacing = 16.dp

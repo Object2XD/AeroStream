@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -46,6 +47,7 @@ import com.example.aero_stream_for_android.domain.model.Playlist
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.ui.components.AeroTextInput
 import com.example.aero_stream_for_android.ui.components.SongListItem
+import com.example.aero_stream_for_android.ui.components.SongListItemStyle
 import com.example.aero_stream_for_android.ui.library.LibraryCategory
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.library.LibrarySortKey
@@ -85,7 +87,8 @@ fun LocalLibraryContent(
                                 onNavigateToPlayer()
                             },
                             isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                            showDownloadIcon = true
+                            showDownloadIcon = true,
+                            style = SongListItemStyle.CompactNoBadge
                         )
                     }
                 }
@@ -100,7 +103,8 @@ fun LocalLibraryContent(
                     items(albums) { album ->
                         AlbumRow(
                             album = album,
-                            onClick = { onNavigateToAlbumDetail(album, null, null) }
+                            onClick = { onNavigateToAlbumDetail(album, null, null) },
+                            showStatusBadge = false
                         )
                     }
                 }
@@ -187,7 +191,7 @@ fun LocalLibraryContent(
 }
 
 @Composable
-internal fun AlbumRow(album: Album, onClick: () -> Unit) {
+internal fun AlbumRow(album: Album, onClick: () -> Unit, showStatusBadge: Boolean = false) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -202,13 +206,19 @@ internal fun AlbumRow(album: Album, onClick: () -> Unit) {
                 .padding(start = 12.dp)
         ) {
             Text(text = album.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                text = listOfNotNull("アルバム", album.artist, album.year?.toString()).joinToString("・"),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (showStatusBadge) {
+                    AlbumCacheBadge(isFullyCached = album.isFullyCached)
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                    text = listOfNotNull("アルバム", album.artist, album.year?.toString()).joinToString("・"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

@@ -40,6 +40,7 @@ import com.example.aero_stream_for_android.ui.components.AeroActionChip
 import com.example.aero_stream_for_android.ui.components.AeroIconActionButton
 import com.example.aero_stream_for_android.ui.components.AeroTopBarSearch
 import com.example.aero_stream_for_android.ui.components.SongListItem
+import com.example.aero_stream_for_android.ui.components.SongListItemStyle
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -193,7 +194,8 @@ fun SearchScreen(
                                 onNavigateToPlayer()
                             },
                             isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                            showDownloadIcon = true
+                            showDownloadIcon = true,
+                            style = SongListItemStyle.WithStatusBadge
                         )
                     }
                 }

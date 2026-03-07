@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aero_stream_for_android.ui.components.SongListItem
+import com.example.aero_stream_for_android.ui.components.SongListItemStyle
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 
@@ -59,7 +60,8 @@ fun HomeScreen(
                         onNavigateToPlayer()
                     },
                     isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                    showDownloadIcon = true
+                    showDownloadIcon = true,
+                    style = SongListItemStyle.WithStatusBadge
                 )
             }
         }
@@ -77,7 +79,8 @@ fun HomeScreen(
                         onNavigateToPlayer()
                     },
                     isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                    showDownloadIcon = true
+                    showDownloadIcon = true,
+                    style = SongListItemStyle.WithStatusBadge
                 )
             }
         }

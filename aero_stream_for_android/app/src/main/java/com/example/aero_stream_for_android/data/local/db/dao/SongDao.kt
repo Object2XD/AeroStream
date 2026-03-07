@@ -93,12 +93,27 @@ interface SongDao {
     @Query("SELECT * FROM songs ORDER BY playCount DESC LIMIT :limit")
     fun getMostPlayed(limit: Int = 20): Flow<List<SongEntity>>
 
-    @Query("SELECT DISTINCT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count FROM songs GROUP BY album, albumArtist ORDER BY album ASC")
+    @Query(
+        """
+        SELECT album,
+               albumArtist,
+               MIN(albumArtUri) as albumArtUri,
+               COUNT(*) as count,
+               SUM(CASE WHEN isCached = 1 THEN 1 ELSE 0 END) as cachedCount
+        FROM songs
+        GROUP BY album, albumArtist
+        ORDER BY album ASC
+        """
+    )
     fun getAlbums(): Flow<List<AlbumInfo>>
 
     @Query(
         """
-        SELECT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count
+        SELECT album,
+               albumArtist,
+               MIN(albumArtUri) as albumArtUri,
+               COUNT(*) as count,
+               SUM(CASE WHEN isCached = 1 THEN 1 ELSE 0 END) as cachedCount
         FROM songs
         WHERE source = :source
         GROUP BY album, albumArtist
@@ -109,7 +124,11 @@ interface SongDao {
 
     @Query(
         """
-        SELECT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count
+        SELECT album,
+               albumArtist,
+               MIN(albumArtUri) as albumArtUri,
+               COUNT(*) as count,
+               SUM(CASE WHEN isCached = 1 THEN 1 ELSE 0 END) as cachedCount
         FROM songs
         WHERE source = :source AND smbConfigId = :smbConfigId
         GROUP BY album, albumArtist
@@ -120,7 +139,11 @@ interface SongDao {
 
     @Query(
         """
-        SELECT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count
+        SELECT album,
+               albumArtist,
+               MIN(albumArtUri) as albumArtUri,
+               COUNT(*) as count,
+               SUM(CASE WHEN isCached = 1 THEN 1 ELSE 0 END) as cachedCount
         FROM songs
         WHERE source = :source AND smbConfigId = :smbConfigId AND smbLibraryBucket IN (:buckets)
         GROUP BY album, albumArtist
@@ -201,6 +224,12 @@ interface SongDao {
 
     @Query("DELETE FROM songs WHERE source = :source AND smbConfigId = :smbConfigId AND smbLibraryBucket IS NULL")
     suspend fun deleteLegacySmbLibraryRows(source: String, smbConfigId: String)
+
+    @Query("SELECT smbPath, smbLastWriteTime, fileSize FROM songs WHERE source = :source AND smbConfigId = :smbConfigId AND smbPath IS NOT NULL")
+    suspend fun getSmbSyncInfoList(source: String, smbConfigId: String): List<SmbSyncInfoProjection>
+
+    @Query("DELETE FROM songs WHERE source = :source AND smbConfigId = :smbConfigId AND smbPath IN (:paths)")
+    suspend fun deleteSongsBySmbPaths(source: String, smbConfigId: String, paths: List<String>)
 
     /**
      * SMBライブラリのスキャン結果をアトミックに置換する。
@@ -292,7 +321,8 @@ data class AlbumInfo(
     val album: String,
     val albumArtist: String,
     val albumArtUri: String?,
-    val count: Int
+    val count: Int,
+    val cachedCount: Int
 )
 
 /**
@@ -309,4 +339,10 @@ data class CachedSongRecord(
     val localPath: String?,
     val cachedAt: Long?,
     val cacheLastPlayedAt: Long?
+)
+
+data class SmbSyncInfoProjection(
+    val smbPath: String,
+    val smbLastWriteTime: Long,
+    val fileSize: Long
 )

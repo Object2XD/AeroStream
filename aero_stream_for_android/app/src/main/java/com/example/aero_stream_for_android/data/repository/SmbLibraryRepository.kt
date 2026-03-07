@@ -37,7 +37,7 @@ class SmbLibraryRepository @Inject constructor(
 ) {
     companion object {
         private const val TAG = "SmbLibraryRepository"
-        private const val INCREMENTAL_BATCH_SIZE = 20
+        private const val INCREMENTAL_BATCH_SIZE = 500
     }
 
     fun getSongs(smbConfigId: String): Flow<List<Song>> =
@@ -78,84 +78,93 @@ class SmbLibraryRepository @Inject constructor(
 
             val rootPath = normalizeSmbRootPath(config.rootPath)
 
-            // クイックスキャン: 既存曲をメモリにロードして変更検知に使用
-            val existingSongsMap: Map<String, Song>? = if (quickScan) {
-                val entities = songDao.getSongsBySourceAndSmbConfigList(MusicSource.SMB.name, config.id)
-                if (entities.isEmpty()) {
-                    null // DBが空ならフルスキャンと同じ
-                } else {
-                    entities.mapNotNull { entity ->
-                        val smbPath = entity.smbPath ?: return@mapNotNull null
-                        smbPath to Song(
-                            id = entity.id,
-                            title = entity.title,
-                            artist = entity.artist,
-                            albumArtist = entity.albumArtist,
-                            album = entity.album,
-                            duration = entity.duration,
-                            albumArtUri = entity.albumArtUri?.let { Uri.parse(it) },
-                            source = MusicSource.valueOf(entity.source),
-                            smbPath = entity.smbPath,
-                            smbConfigId = entity.smbConfigId,
-                            smbLibraryBucket = entity.smbLibraryBucket,
-                            localPath = entity.localPath,
-                            contentUri = entity.contentUri?.let { Uri.parse(it) },
-                            trackNumber = entity.trackNumber,
-                            fileSize = entity.fileSize,
-                            mimeType = entity.mimeType,
-                            smbLastWriteTime = entity.smbLastWriteTime,
-                            isCached = entity.isCached,
-                            cachedAt = entity.cachedAt,
-                            cacheLastPlayedAt = entity.cacheLastPlayedAt,
-                            sourceUpdatedAt = entity.sourceUpdatedAt,
-                            lastPlayedAt = entity.lastPlayedAt,
-                            playCount = entity.playCount
-                        )
-                    }.toMap()
-                }
+            // クイックスキャン: 既存曲の差分比較用にパス・更新日時等の軽量データを取得
+            val existingSyncInfos = if (quickScan) {
+                songDao.getSmbSyncInfoList(MusicSource.SMB.name, config.id)
+                    .associateBy { it.smbPath }
             } else {
                 null
             }
 
-            // スキャン前に旧データを削除
-            songDao.deleteAllBySourceAndSmbConfig(MusicSource.SMB.name, config.id)
+            // フルスキャン時のみスキャン前に旧データを削除
+            if (!quickScan) {
+                songDao.deleteAllBySourceAndSmbConfig(MusicSource.SMB.name, config.id)
+            }
 
             // インクリメンタル保存用バッファ
-            val pendingBatch = mutableListOf<Song>()
+            val pendingBatch = mutableListOf<com.example.aero_stream_for_android.data.local.db.entity.SongEntity>()
             val batchMutex = Mutex()
             var totalSaved = 0
+            val seenPaths = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-            val songs = smbMediaDataSource.scanAllMusicAsSongs(
+            val scannedCount = smbMediaDataSource.scanAllMusicAsSongs(
                 config = config,
                 rootPath = rootPath,
                 onProgress = onProgress,
-                onSongExtracted = { song ->
-                    val toInsert = batchMutex.withLock {
-                        val timestamped = song.copy(
-                            smbConfigId = config.id,
-                            sourceUpdatedAt = System.currentTimeMillis()
-                        )
-                        pendingBatch.add(timestamped)
-                        if (pendingBatch.size >= INCREMENTAL_BATCH_SIZE) {
-                            val batch = pendingBatch.toList()
-                            pendingBatch.clear()
-                            batch
-                        } else {
-                            null
+                onSongExtracted = { song, isUnchanged ->
+                    val smbPath = song.smbPath
+                    if (smbPath != null) {
+                        seenPaths.add(smbPath)
+                    }
+
+                    if (!isUnchanged) {
+                        val toInsert = batchMutex.withLock {
+                            val timestamped = song.copy(
+                                smbConfigId = config.id,
+                                sourceUpdatedAt = System.currentTimeMillis()
+                            )
+                            pendingBatch.add(timestamped.toEntity())
+                            if (pendingBatch.size >= INCREMENTAL_BATCH_SIZE) {
+                                val batch = pendingBatch.toList()
+                                pendingBatch.clear()
+                                batch
+                            } else {
+                                null
+                            }
+                        }
+                        if (toInsert != null) {
+                            songDao.insertSongs(toInsert)
+                            totalSaved += toInsert.size
                         }
                     }
-                    if (toInsert != null) {
-                        songDao.insertSongs(toInsert.map { it.toEntity() })
-                        totalSaved += toInsert.size
-                    }
                 },
-                existingSongsMap = existingSongsMap
+                existingSyncInfos = existingSyncInfos,
+                getExistingSong = { path ->
+                    val entity = songDao.getSongBySmbPath(path)
+                    entity?.let {
+                        Song(
+                            id = it.id,
+                            title = it.title,
+                            artist = it.artist,
+                            albumArtist = it.albumArtist,
+                            album = it.album,
+                            duration = it.duration,
+                            albumArtUri = it.albumArtUri?.let { uri -> android.net.Uri.parse(uri) },
+                            source = MusicSource.valueOf(it.source),
+                            smbPath = it.smbPath,
+                            smbConfigId = it.smbConfigId,
+                            smbLibraryBucket = it.smbLibraryBucket,
+                            localPath = it.localPath,
+                            contentUri = it.contentUri?.let { uri -> android.net.Uri.parse(uri) },
+                            trackNumber = it.trackNumber,
+                            fileSize = it.fileSize,
+                            mimeType = it.mimeType,
+                            smbLastWriteTime = it.smbLastWriteTime,
+                            isCached = it.isCached,
+                            cachedAt = it.cachedAt,
+                            cacheLastPlayedAt = it.cacheLastPlayedAt,
+                            sourceUpdatedAt = it.sourceUpdatedAt,
+                            lastPlayedAt = it.lastPlayedAt,
+                            playCount = it.playCount
+                        )
+                    }
+                }
             )
 
             if (isCancelled()) {
                 return RefreshResult(
                     success = false,
-                    scannedCount = songs.size,
+                    scannedCount = scannedCount,
                     failedCount = 0,
                     message = "スキャンがキャンセルされました"
                 )
@@ -164,26 +173,36 @@ class SmbLibraryRepository @Inject constructor(
             onProgress(
                 ScanProgressEvent(
                     stage = SmbScanStage.SAVING,
-                    scannedCount = songs.size
+                    scannedCount = scannedCount
                 )
             )
 
             // 残りのバッチをフラッシュ
             batchMutex.withLock {
                 if (pendingBatch.isNotEmpty()) {
-                    songDao.insertSongs(pendingBatch.map { it.toEntity() })
+                    songDao.insertSongs(pendingBatch)
                     totalSaved += pendingBatch.size
                     pendingBatch.clear()
                 }
             }
+            
+            // クイックスキャン時：存在しなくなったファイルを削除
+            if (quickScan && existingSyncInfos != null) {
+                val deletedPaths = existingSyncInfos.keys - seenPaths
+                if (deletedPaths.isNotEmpty()) {
+                    deletedPaths.chunked(900).forEach { chunk ->
+                        songDao.deleteSongsBySmbPaths(MusicSource.SMB.name, config.id, chunk)
+                    }
+                }
+            }
 
             val message = buildString {
-                append("${songs.size}件の曲を解析しました")
+                append("${scannedCount}件の曲を解析しました")
             }
 
             RefreshResult(
                 success = true,
-                scannedCount = songs.size,
+                scannedCount = scannedCount,
                 failedCount = 0,
                 message = message
             )
