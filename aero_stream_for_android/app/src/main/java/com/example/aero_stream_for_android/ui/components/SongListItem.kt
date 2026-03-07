@@ -15,8 +15,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.SongCacheStatus
+import com.example.aero_stream_for_android.domain.model.cacheStatus
+import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
 import com.example.aero_stream_for_android.ui.theme.*
 
 /**
@@ -103,8 +105,8 @@ fun SongListItem(
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // ソースバッジ
-                when {
-                    song.isCached -> {
+                when (song.cacheStatus) {
+                    SongCacheStatus.CACHED -> {
                         Icon(
                             Icons.Default.CheckCircle,
                             contentDescription = "Downloaded",
@@ -113,7 +115,7 @@ fun SongListItem(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                     }
-                    song.source == MusicSource.SMB -> {
+                    SongCacheStatus.SMB_NOT_CACHED -> {
                         Icon(
                             Icons.Default.Cloud,
                             contentDescription = "SMB",
@@ -122,6 +124,7 @@ fun SongListItem(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                     }
+                    SongCacheStatus.NONE -> Unit
                 }
                 Text(
                     text = "${song.artist} · ${formatDuration(song.duration)}",
@@ -134,7 +137,7 @@ fun SongListItem(
         }
 
         // ダウンロードアイコン（SMBソースの場合）
-        if (showDownloadIcon && song.source == MusicSource.SMB && !song.isCached) {
+        if (showDownloadIcon && song.isCacheDownloadEligible) {
             IconButton(onClick = { /* ダウンロード処理 */ }) {
                 Icon(
                     Icons.Default.Download,

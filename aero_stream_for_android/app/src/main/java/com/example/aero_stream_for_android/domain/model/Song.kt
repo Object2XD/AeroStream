@@ -46,3 +46,25 @@ data class Song(
     /** 再生回数 */
     val playCount: Int = 0
 )
+
+enum class SongCacheStatus {
+    CACHED,
+    SMB_NOT_CACHED,
+    NONE
+}
+
+val Song.isSmbSource: Boolean
+    get() = source == MusicSource.SMB
+
+val Song.isSmbNotCached: Boolean
+    get() = isSmbSource && !isCached
+
+val Song.isCacheDownloadEligible: Boolean
+    get() = isSmbNotCached && !smbPath.isNullOrBlank()
+
+val Song.cacheStatus: SongCacheStatus
+    get() = when {
+        isCached -> SongCacheStatus.CACHED
+        isSmbNotCached -> SongCacheStatus.SMB_NOT_CACHED
+        else -> SongCacheStatus.NONE
+    }

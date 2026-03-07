@@ -233,3 +233,4 @@ R7. SystemBar color ownership (edge-to-edge)
 ## 関連文書
 
 - UIデザイン方針は `design.md` を参照
+- 段階導入リファクタリングの進行管理は `task.md` を参照

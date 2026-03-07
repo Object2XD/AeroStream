@@ -1,10 +1,6 @@
 package com.example.aero_stream_for_android.data.remote.smb
 
 import com.example.aero_stream_for_android.domain.model.SmbConfig
-import com.hierynomus.msdtyp.AccessMask
-import com.hierynomus.msfscc.FileAttributes
-import com.hierynomus.mssmb2.SMB2CreateDisposition
-import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig as SmbJConfig
 import com.hierynomus.smbj.auth.AuthenticationContext
@@ -18,10 +14,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.net.InetAddress
-import java.net.ConnectException
-import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import java.util.EnumSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -52,17 +45,9 @@ class SmbConnectionManager @Inject constructor() {
         private const val TAG = "SmbConnectionManager"
     }
 
-    private data class ConnectionEntry(
-        var client: SMBClient? = null,
-        var connection: Connection? = null,
-        var session: Session? = null,
-        @Volatile var share: DiskShare? = null,
-        @Volatile var currentConfig: SmbConfig? = null,
-        val mutex: Mutex = Mutex()
-    )
-
-    private val entries = ConcurrentHashMap<String, ConnectionEntry>()
+    private val entries = ConcurrentHashMap<String, SmbConnectionEntry>()
     private val entriesMutex = Mutex()
+    private val lifecycle = SmbConnectionLifecycle()
 
     /**
      * SMBサーバーに接続してDiskShareを返す。
@@ -72,51 +57,25 @@ class SmbConnectionManager @Inject constructor() {
         val configKey = config.connectionKey()
         val entry = getOrCreateEntry(configKey)
 
-        if (entry.currentConfig == config && isConnected(entry)) {
+        if (entry.currentConfig == config && lifecycle.isConnected(entry)) {
             entry.share?.let { return it }
         }
 
         return entry.mutex.withLock {
             withContext(Dispatchers.IO) {
-                if (entry.currentConfig != config || !isConnected(entry)) {
-                    disconnectEntry(entry)
-                    connect(entry, config)
+                if (entry.currentConfig != config || !lifecycle.isConnected(entry)) {
+                    lifecycle.disconnect(entry)
+                    lifecycle.connect(entry, config)
                 }
                 entry.share ?: throw IllegalStateException("Failed to connect to SMB share")
             }
         }
     }
 
-    private suspend fun getOrCreateEntry(key: String): ConnectionEntry {
+    private suspend fun getOrCreateEntry(key: String): SmbConnectionEntry {
         return entriesMutex.withLock {
-            entries.getOrPut(key) { ConnectionEntry() }
+            entries.getOrPut(key) { SmbConnectionEntry() }
         }
-    }
-
-    private fun connect(entry: ConnectionEntry, config: SmbConfig) {
-        val smbConfig = SmbJConfig.builder()
-            .withTimeout(30, TimeUnit.SECONDS)
-            .withReadTimeout(60, TimeUnit.SECONDS)
-            .withWriteTimeout(60, TimeUnit.SECONDS)
-            .withSoTimeout(30, TimeUnit.SECONDS)
-            .build()
-
-        entry.client = SMBClient(smbConfig)
-        entry.connection = entry.client!!.connect(config.hostname, config.port)
-
-        val authContext = if (config.username.isNotBlank()) {
-            AuthenticationContext(
-                config.username,
-                config.password.toCharArray(),
-                config.domain.ifBlank { null }
-            )
-        } else {
-            AuthenticationContext.guest()
-        }
-
-        entry.session = entry.connection!!.authenticate(authContext)
-        entry.share = entry.session!!.connectShare(config.shareName) as DiskShare
-        entry.currentConfig = config
     }
 
     suspend fun validateHostTarget(host: String): HostValidationResult = withContext(Dispatchers.IO) {
@@ -177,7 +136,7 @@ class SmbConnectionManager @Inject constructor() {
         stage: String,
         throwable: Throwable
     ): String {
-        val reason = classifyFailureReason(throwable)
+        val reason = classifySmbFailureReason(throwable)
         val detail = buildString {
             appendLine("段階: $stage")
             appendLine("表示名: ${config.displayName.ifBlank { "SMB" }}")
@@ -202,34 +161,12 @@ class SmbConnectionManager @Inject constructor() {
     }
 
     fun isConnected(): Boolean {
-        return entries.values.any { isConnected(it) }
+        return entries.values.any { lifecycle.isConnected(it) }
     }
 
     fun isConnected(config: SmbConfig): Boolean {
         val entry = entries[config.connectionKey()] ?: return false
-        return isConnected(entry)
-    }
-
-    private fun isConnected(entry: ConnectionEntry): Boolean {
-        return try {
-            entry.connection?.isConnected == true &&
-                entry.session != null &&
-                entry.share != null &&
-                isShareHealthy(entry.share)
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
-     * shareが実際に利用可能かを軽量に確認する。
-     */
-    private fun isShareHealthy(share: DiskShare?): Boolean {
-        return try {
-            share?.isConnected == true
-        } catch (e: Exception) {
-            false
-        }
+        return lifecycle.isConnected(entry)
     }
 
     /**
@@ -238,12 +175,12 @@ class SmbConnectionManager @Inject constructor() {
      */
     suspend fun resetIfBroken(config: SmbConfig) {
         val entry = getOrCreateEntry(config.connectionKey())
-        if (!isConnected(entry)) {
+        if (!lifecycle.isConnected(entry)) {
             Log.w(TAG, "resetIfBroken: 接続が壊れているため再接続します")
             entry.mutex.withLock {
                 withContext(Dispatchers.IO) {
-                    disconnectEntry(entry)
-                    connect(entry, config)
+                    lifecycle.disconnect(entry)
+                    lifecycle.connect(entry, config)
                 }
             }
         }
@@ -254,7 +191,7 @@ class SmbConnectionManager @Inject constructor() {
             entries.remove(configId)
         } ?: return
         withContext(Dispatchers.IO) {
-            disconnectEntry(entry)
+            lifecycle.disconnect(entry)
         }
     }
 
@@ -264,29 +201,12 @@ class SmbConnectionManager @Inject constructor() {
         }
         withContext(Dispatchers.IO) {
             snapshot.values.forEach { entry ->
-                disconnectEntry(entry)
+                lifecycle.disconnect(entry)
             }
         }
     }
 
     suspend fun disconnect() = disconnectAll()
-
-    private fun disconnectEntry(entry: ConnectionEntry) {
-        try {
-            entry.share?.close()
-            entry.session?.close()
-            entry.connection?.close()
-            entry.client?.close()
-        } catch (e: Exception) {
-            // Ignore disconnect errors
-        } finally {
-            entry.share = null
-            entry.session = null
-            entry.connection = null
-            entry.client = null
-            entry.currentConfig = null
-        }
-    }
 
     private fun SmbConfig.connectionKey(): String {
         return id.ifBlank { "$hostname:$port/$shareName" }
@@ -457,73 +377,5 @@ class SmbConnectionManager @Inject constructor() {
                 // Ignore cleanup errors
             }
         }
-    }
-
-    private fun classifyFailureReason(throwable: Throwable): String {
-        val root = generateSequence(throwable) { it.cause }.last()
-        val messageChain = generateSequence(throwable) { it.cause }
-            .mapNotNull { it.message }
-            .joinToString(" -> ")
-
-        return when {
-            root is UnknownHostException || messageChain.contains("UnknownHost", ignoreCase = true) ->
-                "この端末のDNSではホスト名を解決できません。短いローカル機器名は動作しないことがあります。IPアドレス、またはDNSで解決できる完全修飾ホスト名を使用してください。"
-
-            root is ConnectException || messageChain.contains("Connection refused", ignoreCase = true) ->
-                "ホストには到達しましたが、ポート接続が拒否されました。ホスト、ポート、SMBサービスの起動状態を確認してください。"
-
-            root is SocketTimeoutException || messageChain.contains("timed out", ignoreCase = true) ->
-                "タイムアウトしました。ホスト到達性、ポート、VPNやファイアウォール設定を確認してください。"
-
-            messageChain.contains("STATUS_LOGON_FAILURE", ignoreCase = true) ||
-                messageChain.contains("logon failure", ignoreCase = true) ->
-                "ユーザー名またはパスワードが正しくありません。"
-
-            messageChain.contains("STATUS_ACCESS_DENIED", ignoreCase = true) ||
-                messageChain.contains("access denied", ignoreCase = true) ->
-                "アクセスが拒否されました。権限または認証情報を確認してください。"
-
-            messageChain.contains("STATUS_BAD_NETWORK_NAME", ignoreCase = true) ||
-                messageChain.contains("bad network name", ignoreCase = true) ->
-                "共有名が見つかりません。共有名のスペルを確認してください。"
-
-            messageChain.contains("STATUS_OBJECT_PATH_NOT_FOUND", ignoreCase = true) ->
-                "開始フォルダまたは指定パスが見つかりません。"
-
-            messageChain.contains("STATUS_OBJECT_NAME_NOT_FOUND", ignoreCase = true) ->
-                "開始フォルダが見つかりません。共有名の下の相対パスを確認してください。"
-
-            messageChain.contains("STATUS_OBJECT_PATH_SYNTAX_BAD", ignoreCase = true) ->
-                "開始フォルダの形式が正しくありません。共有名の下の相対パスを指定してください。"
-
-            messageChain.contains("STATUS_NOT_SUPPORTED", ignoreCase = true) ->
-                "サーバー側の SMB 設定がこの接続方法を受け付けていません。"
-
-            messageChain.isNotBlank() ->
-                "${root::class.simpleName}: $messageChain"
-
-            else ->
-                root::class.simpleName ?: "不明なエラー"
-        }
-    }
-
-    private fun isUnknownHostFailure(throwable: Throwable): Boolean {
-        val root = generateSequence(throwable) { it.cause }.last()
-        val messageChain = generateSequence(throwable) { it.cause }
-            .mapNotNull { it.message }
-            .joinToString(" -> ")
-        return root is UnknownHostException || messageChain.contains("UnknownHost", ignoreCase = true)
-    }
-
-    private fun isLikelyShortLocalName(host: String): Boolean {
-        return host.isNotBlank() &&
-            !host.contains('.') &&
-            host.length <= 63 &&
-            host.all { it.isLetterOrDigit() || it == '-' || it == '_' }
-    }
-
-    private fun isIpAddress(host: String): Boolean {
-        val ipv4 = Regex("""^(\d{1,3}\.){3}\d{1,3}$""")
-        return ipv4.matches(host) || host.contains(':')
     }
 }

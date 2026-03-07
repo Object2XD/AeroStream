@@ -274,4 +274,52 @@ class AlbumDetailViewModelTest {
         assertEquals(0.4f, active["dir\\song1.mp3"]?.progress)
         assertEquals(null, active["dir\\song2.mp3"]?.progress)
     }
+
+    @Test
+    fun loadAlbum_downloadSource_usesSmbQueryForCompatibility() = runTest(dispatcher) {
+        val smbSong = Song(
+            id = 21L,
+            title = "Compat Song",
+            artist = "Artist",
+            albumArtist = "Artist",
+            album = "Album",
+            duration = 1200L,
+            source = MusicSource.SMB,
+            smbPath = "dir\\compat.mp3",
+            smbConfigId = "cfg",
+            isCached = false
+        )
+
+        every {
+            musicRepository.getSongsByAlbumSourceAndSmbConfig(
+                album = "Album",
+                albumArtist = "Artist",
+                source = MusicSource.SMB,
+                smbConfigId = "cfg"
+            )
+        } returns flowOf(listOf(smbSong))
+        every { downloadManager.observeAllDownloads() } returns flowOf(emptyList())
+        coEvery { settingsRepository.getSmbConfigById(any()) } returns null
+        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
+
+        val savedStateHandle = SavedStateHandle(
+            mapOf(
+                Screen.AlbumDetail.albumNameArg to "Album",
+                Screen.AlbumDetail.albumArtistArg to "Artist",
+                Screen.AlbumDetail.sourceArg to MusicSource.DOWNLOAD.name,
+                Screen.AlbumDetail.smbConfigIdArg to "cfg"
+            )
+        )
+
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        advanceUntilIdle()
+
+        verify(exactly = 1) {
+            musicRepository.getSongsByAlbumSourceAndSmbConfig("Album", "Artist", MusicSource.SMB, "cfg")
+        }
+        verify(exactly = 0) {
+            musicRepository.getSongsByAlbumAndSource("Album", "Artist", MusicSource.DOWNLOAD)
+        }
+        assertEquals(true, viewModel.uiState.value.isDownloadActionEnabled)
+    }
 }

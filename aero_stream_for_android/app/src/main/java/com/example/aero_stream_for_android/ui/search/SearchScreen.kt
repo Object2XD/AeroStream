@@ -21,7 +21,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.aero_stream_for_android.ui.components.AeroActionChip
+import com.example.aero_stream_for_android.ui.components.AeroIconActionButton
 import com.example.aero_stream_for_android.ui.components.AeroTopBarSearch
 import com.example.aero_stream_for_android.ui.components.SongListItem
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
@@ -69,9 +69,11 @@ fun SearchScreen(
                 onNavigateBack = onNavigateBack,
                 trailingIcon = {
                     if (uiState.query.isNotEmpty()) {
-                        IconButton(onClick = searchViewModel::clearSearch) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear")
-                        }
+                        AeroIconActionButton(
+                            onClick = searchViewModel::clearSearch,
+                            contentDescription = "検索文字列をクリア",
+                            icon = { Icon(Icons.Default.Clear, contentDescription = null) }
+                        )
                     }
                 },
                 modifier = Modifier

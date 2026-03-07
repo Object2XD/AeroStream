@@ -1,8 +1,6 @@
 package com.example.aero_stream_for_android.data.remote.smb
 
 import android.content.Context
-import android.media.MediaMetadataRetriever
-import android.net.Uri
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.example.aero_stream_for_android.data.smb.BucketScanResult
@@ -10,6 +8,7 @@ import com.example.aero_stream_for_android.data.smb.MetadataResult
 import com.example.aero_stream_for_android.data.smb.ScanAccumulator
 import com.example.aero_stream_for_android.data.smb.ScanProgressEvent
 import com.example.aero_stream_for_android.data.smb.SmbScanStage
+import com.example.aero_stream_for_android.data.smb.SmbScanProgressTracker
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.SmbConfig
 import com.example.aero_stream_for_android.domain.model.Song
@@ -26,13 +25,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
 import java.io.InputStream
-import java.net.SocketTimeoutException
 import java.util.EnumSet
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -48,8 +43,6 @@ class SmbMediaDataSource @Inject constructor(
     companion object {
         private const val TAG = "SmbMediaDataSource"
         private const val MAX_SCAN_RETRY = 2
-        private const val METADATA_PARTIAL_READ_BYTES = 2 * 1024 * 1024L // 2MB
-        private const val METADATA_FULL_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024L // 100MB
 
         private val AUDIO_EXTENSIONS = setOf(
             "mp3", "m4a", "flac", "ogg", "wav", "aac", "wma", "opus",
@@ -66,6 +59,11 @@ class SmbMediaDataSource @Inject constructor(
                 message.contains("STATUS_OBJECT_PATH_NOT_FOUND", ignoreCase = true)
         }
     }
+
+    private val metadataExtractor = SmbMetadataExtractor(
+        context = context,
+        loggerTag = TAG
+    )
 
     /**
      * 指定パスのディレクトリ内の音楽ファイルとサブディレクトリを探索する。
@@ -138,19 +136,10 @@ class SmbMediaDataSource @Inject constructor(
         onSongExtracted: suspend (Song) -> Unit = {},
         existingSongsMap: Map<String, Song>? = null
     ): List<Song> = withContext(Dispatchers.IO) {
-        onProgress(
-            ScanProgressEvent(
-                stage = SmbScanStage.LISTING,
-                currentPath = normalizeSmbRootPath(rootPath)
-            )
-        )
+        val progressTracker = SmbScanProgressTracker(onProgress)
+        progressTracker.emitListing(currentPath = normalizeSmbRootPath(rootPath))
 
         val fileChannel = Channel<SmbFileInfo>(capacity = Channel.BUFFERED)
-        val totalFilesFound = AtomicInteger(0)
-        val processedCount = AtomicInteger(0)
-        val scannedCount = AtomicInteger(0)
-        val failedCount = AtomicInteger(0)
-        val skippedDirectories = AtomicInteger(0)
         val results = ConcurrentLinkedQueue<Song>()
         val semaphore = Semaphore(4)
 
@@ -162,8 +151,7 @@ class SmbMediaDataSource @Inject constructor(
                         config,
                         normalizeSmbRootPath(rootPath),
                         fileChannel,
-                        totalFilesFound,
-                        skippedDirectories
+                        progressTracker
                     )
                 } finally {
                     fileChannel.close()
@@ -185,80 +173,30 @@ class SmbMediaDataSource @Inject constructor(
                                     && fileInfo.lastWriteTime > 0L
                                 ) {
                                     results.add(existingSong)
-                                    scannedCount.incrementAndGet()
+                                    progressTracker.onQuickScanHit(currentPath = fileInfo.path)
                                     onSongExtracted(existingSong)
-                                    onProgress(
-                                        ScanProgressEvent(
-                                            stage = SmbScanStage.ANALYZING,
-                                            processedCount = processedCount.get(),
-                                            scannedCount = scannedCount.get(),
-                                            failedCount = failedCount.get(),
-                                            skippedDirectories = skippedDirectories.get(),
-                                            totalCount = totalFilesFound.get(),
-                                            currentPath = fileInfo.path
-                                        )
-                                    )
                                     return@withPermit
                                 }
 
-                                onProgress(
-                                    ScanProgressEvent(
-                                        stage = SmbScanStage.ANALYZING,
-                                        processedCount = processedCount.get(),
-                                        scannedCount = scannedCount.get(),
-                                        failedCount = failedCount.get(),
-                                        skippedDirectories = skippedDirectories.get(),
-                                        totalCount = totalFilesFound.get(),
-                                        currentPath = fileInfo.path
-                                    )
-                                )
+                                progressTracker.emitAnalyzing(currentPath = fileInfo.path)
 
                                 val result = extractSongMetadata(config, fileInfo)
                                 when (result) {
                                     is MetadataResult.Success -> {
                                         results.add(result.song)
-                                        scannedCount.incrementAndGet()
                                         onSongExtracted(result.song)
                                     }
                                     is MetadataResult.Fallback -> {
                                         results.add(result.song)
-                                        scannedCount.incrementAndGet()
-                                        failedCount.incrementAndGet()
                                         onSongExtracted(result.song)
                                     }
-                                    is MetadataResult.Error -> {
-                                        failedCount.incrementAndGet()
-                                    }
+                                    is MetadataResult.Error -> Unit
                                 }
-                                processedCount.incrementAndGet()
-
-                                onProgress(
-                                    ScanProgressEvent(
-                                        stage = SmbScanStage.ANALYZING,
-                                        processedCount = processedCount.get(),
-                                        scannedCount = scannedCount.get(),
-                                        failedCount = failedCount.get(),
-                                        skippedDirectories = skippedDirectories.get(),
-                                        totalCount = totalFilesFound.get(),
-                                        currentPath = fileInfo.path
-                                    )
-                                )
+                                progressTracker.onMetadataResult(currentPath = fileInfo.path, result = result)
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                processedCount.incrementAndGet()
-                                failedCount.incrementAndGet()
-                                onProgress(
-                                    ScanProgressEvent(
-                                        stage = SmbScanStage.ANALYZING,
-                                        processedCount = processedCount.get(),
-                                        scannedCount = scannedCount.get(),
-                                        failedCount = failedCount.get(),
-                                        skippedDirectories = skippedDirectories.get(),
-                                        totalCount = totalFilesFound.get(),
-                                        currentPath = fileInfo.path
-                                    )
-                                )
+                                progressTracker.onProcessingError(currentPath = fileInfo.path)
                                 Log.w(TAG, "Unexpected error processing ${fileInfo.path}", e)
                             }
                         }
@@ -344,23 +282,22 @@ class SmbMediaDataSource @Inject constructor(
         config: SmbConfig,
         path: String,
         channel: Channel<SmbFileInfo>,
-        totalCount: AtomicInteger,
-        skippedDirectories: AtomicInteger
+        progressTracker: SmbScanProgressTracker
     ) {
         try {
             currentCoroutineContext().ensureActive()
             val listing = listDirectoryWithRetry(config, path)
-            totalCount.addAndGet(listing.audioFiles.size)
+            progressTracker.addDiscoveredFiles(listing.audioFiles.size)
             for (file in listing.audioFiles) {
                 channel.send(file)
             }
             for (dir in listing.directories) {
-                scanRecursiveToChannel(config, dir.path, channel, totalCount, skippedDirectories)
+                scanRecursiveToChannel(config, dir.path, channel, progressTracker)
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            skippedDirectories.incrementAndGet()
+            progressTracker.onDirectorySkipped()
             Log.w(TAG, "Failed to scan directory: $path", e)
         }
     }
@@ -512,94 +449,12 @@ class SmbMediaDataSource @Inject constructor(
     }
 
     private suspend fun extractSongMetadata(config: SmbConfig, fileInfo: SmbFileInfo): MetadataResult {
-        val fallbackSong = toSong(fileInfo).copy(
-            smbConfigId = config.id,
-            sourceUpdatedAt = System.currentTimeMillis()
+        return metadataExtractor.extractSongMetadata(
+            config = config,
+            fileInfo = fileInfo,
+            openFileStream = ::openFileStream,
+            toSong = ::toSong
         )
-        val tempFile = File.createTempFile("smb_meta_", ".${fileInfo.extension}", context.cacheDir)
-
-        return try {
-            // 大きいファイルはメタデータ取得をスキップしてフォールバック
-            if (fileInfo.size > METADATA_FULL_DOWNLOAD_MAX_BYTES) {
-                Log.d(TAG, "File too large for metadata extraction (${fileInfo.size} bytes), using fallback: ${fileInfo.path}")
-                return MetadataResult.Fallback(fallbackSong)
-            }
-
-            // メタデータは先頭2MBに含まれるため、部分読み取りで高速化
-            openFileStream(config, fileInfo.path).use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var totalBytesRead = 0L
-                    while (totalBytesRead < METADATA_PARTIAL_READ_BYTES) {
-                        val bytesRead = input.read(
-                            buffer, 0,
-                            minOf(buffer.size.toLong(), METADATA_PARTIAL_READ_BYTES - totalBytesRead).toInt()
-                        )
-                        if (bytesRead == -1) break
-                        output.write(buffer, 0, bytesRead)
-                        totalBytesRead += bytesRead
-                    }
-                }
-            }
-
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(tempFile.absolutePath)
-
-                val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: fallbackSong.title
-                val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: fallbackSong.artist
-                val albumArtist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: artist
-                val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: fallbackSong.album
-                val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    ?.toLongOrNull()
-                    ?: 0L
-                val trackNumber = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
-                    ?.substringBefore('/')
-                    ?.toIntOrNull()
-                    ?: 0
-                val artUri = retriever.embeddedPicture?.let { bytes ->
-                    saveArtwork(config.id, fileInfo.path, bytes)
-                }
-
-                MetadataResult.Success(
-                    fallbackSong.copy(
-                        title = title,
-                        artist = artist,
-                        albumArtist = albumArtist,
-                        album = album,
-                        duration = duration,
-                        trackNumber = trackNumber,
-                        albumArtUri = artUri
-                    )
-                )
-            } finally {
-                runCatching { retriever.release() }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "Metadata extraction failed for ${fileInfo.path}, using fallback", e)
-            MetadataResult.Fallback(fallbackSong)
-        } finally {
-            tempFile.delete()
-        }
-    }
-
-    private fun saveArtwork(smbConfigId: String, smbPath: String, bytes: ByteArray): Uri {
-        val artworkDir = File(context.cacheDir, "smb_artwork${File.separator}$smbConfigId").apply {
-            mkdirs()
-        }
-        val artworkFile = File(artworkDir, "${smbPath.hashCode()}.jpg")
-        artworkFile.writeBytes(bytes)
-        return Uri.fromFile(artworkFile)
     }
 }
 

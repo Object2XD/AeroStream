@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,39 +13,31 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
@@ -147,197 +138,6 @@ fun AeroIconOutlinedButton(
 }
 
 @Composable
-fun AeroTextInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    singleLine: Boolean = true,
-    enabled: Boolean = true,
-    readOnly: Boolean = false,
-    isError: Boolean = false,
-    shape: Shape = RoundedCornerShape(14.dp),
-    textStyle: TextStyle = AeroCompactUiTokens.rowSubtitleTextStyle(),
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    placeholder: @Composable (() -> Unit)? = null,
-    label: @Composable (() -> Unit)? = null,
-    supportingText: @Composable (() -> Unit)? = null,
-    leadingIcon: @Composable (() -> Unit)? = null,
-    trailingIcon: @Composable (() -> Unit)? = null
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = singleLine,
-        enabled = enabled,
-        readOnly = readOnly,
-        isError = isError,
-        shape = shape,
-        textStyle = textStyle,
-        keyboardOptions = keyboardOptions,
-        visualTransformation = visualTransformation,
-        placeholder = placeholder,
-        label = label,
-        supportingText = supportingText,
-        leadingIcon = leadingIcon,
-        trailingIcon = trailingIcon,
-        modifier = modifier.heightIn(min = 52.dp)
-    )
-}
-
-@Composable
-fun AeroSearchField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    placeholder: @Composable (() -> Unit)? = null,
-    trailingIcon: @Composable (() -> Unit)? = null
-) {
-    TextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.heightIn(min = 52.dp),
-        singleLine = true,
-        shape = RoundedCornerShape(24.dp),
-        leadingIcon = {
-            Icon(Icons.Default.Search, contentDescription = "検索")
-        },
-        trailingIcon = trailingIcon,
-        placeholder = placeholder,
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent
-        )
-    )
-}
-
-@Composable
-fun AeroFormField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholderText: String,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    singleLine: Boolean = true,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    trailingIcon: (@Composable () -> Unit)? = null
-) {
-    AeroTextInput(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        enabled = enabled,
-        singleLine = singleLine,
-        keyboardOptions = keyboardOptions,
-        visualTransformation = visualTransformation,
-        placeholder = { Text(placeholderText) },
-        trailingIcon = trailingIcon
-    )
-}
-
-@Composable
-fun AeroTopBar(
-    title: String,
-    onNavigateBack: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    actions: @Composable RowScope.() -> Unit = {}
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                start = AeroCompactUiTokens.screenHorizontalPadding,
-                end = AeroCompactUiTokens.screenHorizontalPadding,
-                top = AeroCompactUiTokens.headerTopPadding,
-                bottom = AeroCompactUiTokens.headerBottomPadding
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (onNavigateBack != null) {
-            AeroIconActionButton(
-                onClick = onNavigateBack,
-                contentDescription = "戻る",
-                icon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) }
-            )
-            Spacer(modifier = Modifier.size(4.dp))
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = AeroCompactUiTokens.topAppBarTitleTextStyle(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = AeroCompactUiTokens.headerTertiaryTextStyle(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = actions
-        )
-    }
-}
-
-@Composable
-fun AeroTopBarSearch(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholderText: String,
-    onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    trailingIcon: @Composable (() -> Unit)? = null
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                start = AeroCompactUiTokens.screenHorizontalPadding,
-                end = AeroCompactUiTokens.screenHorizontalPadding,
-                top = AeroCompactUiTokens.headerTopPadding,
-                bottom = AeroCompactUiTokens.headerBottomPadding
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AeroIconActionButton(
-            onClick = onNavigateBack,
-            contentDescription = "戻る",
-            icon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) }
-        )
-        Spacer(modifier = Modifier.size(4.dp))
-        AeroSearchField(
-            value = value,
-            onValueChange = onValueChange,
-            placeholder = {
-                Text(
-                    text = placeholderText,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
-                )
-            },
-            trailingIcon = trailingIcon,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
 fun AeroFilterChip(
     label: String,
     selected: Boolean,
@@ -360,6 +160,47 @@ fun AeroFilterChip(
             selectedLabelColor = AeroCompactUiTokens.chipSelectedLabelColor()
         )
     )
+}
+
+@Composable
+fun AeroSortPill(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
+) {
+    Surface(
+        shape = RoundedCornerShape(AeroCompactUiTokens.chipCornerRadius),
+        color = AeroCompactUiTokens.chipSelectedContainerColor(),
+        modifier = modifier
+            .defaultMinSize(minHeight = AeroCompactUiTokens.chipMinHeight)
+            .clickable(onClick = onClick)
+            .semantics {
+                if (contentDescription != null) {
+                    this.contentDescription = contentDescription
+                }
+            }
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = AeroCompactUiTokens.chipHorizontalPadding,
+                vertical = AeroCompactUiTokens.chipVerticalPadding
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = AeroCompactUiTokens.chipLabelTextStyle(),
+                color = AeroCompactUiTokens.chipSelectedLabelColor()
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = AeroCompactUiTokens.chipSelectedLabelColor()
+            )
+        }
+    }
 }
 
 @Composable

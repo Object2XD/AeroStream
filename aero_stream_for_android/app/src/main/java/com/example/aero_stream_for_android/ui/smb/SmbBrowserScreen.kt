@@ -58,9 +58,11 @@ fun SmbBrowserScreen(
                     modifier = Modifier.background(MaterialTheme.colorScheme.background),
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
-                            }
+                            AeroIconActionButton(
+                                onClick = { searchQuery = "" },
+                                contentDescription = "検索文字列をクリア",
+                                icon = { Icon(Icons.Default.Clear, contentDescription = null) }
+                            )
                         }
                     }
                 )

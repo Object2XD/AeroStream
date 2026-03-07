@@ -11,6 +11,7 @@ import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
 import com.example.aero_stream_for_android.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -35,6 +36,9 @@ data class AlbumDetailUiState(
     val totalDurationMs: Long = 0L,
     val activeDownloadsBySmbPath: Map<String, TrackDownloadVisualState> = emptyMap()
 ) {
+    val isSmbContext: Boolean
+        get() = source == MusicSource.SMB || source == MusicSource.DOWNLOAD
+
     val displayArtist: String
         get() = album?.albumArtist?.ifBlank { album.artist }.orEmpty()
 
@@ -58,15 +62,13 @@ data class AlbumDetailUiState(
         }
 
     val pendingSmbSongs: List<Song>
-        get() = songs.filter { song ->
-            song.source == MusicSource.SMB && !song.isCached && !song.smbPath.isNullOrBlank()
-        }
+        get() = songs.filter { song -> song.isCacheDownloadEligible }
 
     val isAlbumCached: Boolean
-        get() = source == MusicSource.SMB && pendingSmbSongs.isEmpty()
+        get() = isSmbContext && pendingSmbSongs.isEmpty()
 
     val isDownloadActionEnabled: Boolean
-        get() = source == MusicSource.SMB && !isLoading && pendingSmbSongs.isNotEmpty()
+        get() = isSmbContext && !isLoading && pendingSmbSongs.isNotEmpty()
 }
 
 data class TrackDownloadVisualState(
@@ -142,11 +144,23 @@ class AlbumDetailViewModel @Inject constructor(
                     source = MusicSource.LOCAL
                 )
 
-                MusicSource.DOWNLOAD -> musicRepository.getSongsByAlbumAndSource(
-                    album = albumName,
-                    albumArtist = albumArtist,
-                    source = MusicSource.DOWNLOAD
-                )
+                MusicSource.DOWNLOAD -> {
+                    val configId = smbConfigId
+                    if (!configId.isNullOrBlank()) {
+                        musicRepository.getSongsByAlbumSourceAndSmbConfig(
+                            album = albumName,
+                            albumArtist = albumArtist,
+                            source = MusicSource.SMB,
+                            smbConfigId = configId
+                        )
+                    } else {
+                        musicRepository.getSongsByAlbumAndSource(
+                            album = albumName,
+                            albumArtist = albumArtist,
+                            source = MusicSource.SMB
+                        )
+                    }
+                }
 
                 null -> musicRepository.getSongsByAlbum(
                     album = albumName,
@@ -197,7 +211,7 @@ class AlbumDetailViewModel @Inject constructor(
     fun cacheAlbumTracks() {
         viewModelScope.launch {
             val state = _uiState.value
-            if (state.source != MusicSource.SMB) {
+            if (!state.isSmbContext) {
                 return@launch
             }
 

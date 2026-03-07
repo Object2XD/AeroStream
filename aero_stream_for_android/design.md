@@ -114,6 +114,9 @@
 ## Update Policy
 
 - この方針から逸脱する実装を行う場合、PR説明に理由を明記する
+- 段階導入リファクタリングの進行状況は `task.md` に記録する
+  - 各フェーズの着手/実装完了/テスト完了/ブロッカーを必ず追記する
+  - `Verification` 未記載のフェーズを `Done` にしない
 - 新規 `Aero*` コンポーネント追加時は以下を必ず記載する
   - 適用対象
   - 非適用対象
@@ -126,3 +129,16 @@
 - `Material3` の直書きUI（`TextField`, `Button`, `ModalBottomSheet` など）は、
   共通化対象であれば `Aero*` へ置換することを原則とする
 - 直書きUIを残す場合は、PRに「共通化しない理由」を明記する
+
+## Design Compliance Check
+
+- PR作成時に以下を必須チェックとする
+  - `AeroSearchField` と `AeroTextInput` の用途混在がない
+  - 単一選択UIに `AeroSingleChoiceOptionRow` または同等セマンティクスが適用されている
+  - アイコン操作に `contentDescription` が設定されている
+  - 新規UIで `Aero*` 再利用を優先し、直書きを追加した場合は理由が記載されている
+- 準拠確認コマンド（最低実行）
+  - `:app:compileDebugKotlin`
+  - `:app:compileDebugAndroidTestKotlin`
+  - `:app:testDebugUnitTest`
+- UI変更を含む場合は、対象の `androidTest` かスクリーンショット確認結果をPR本文へ記載する

@@ -21,9 +21,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.PlayerState
 import com.example.aero_stream_for_android.domain.model.RepeatMode
+import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
 import com.example.aero_stream_for_android.ui.theme.*
 
 /**
@@ -78,7 +78,7 @@ fun FullScreenPlayer(
             )
             Spacer(modifier = Modifier.weight(1f))
             // SMBソースの場合、ダウンロードボタンを表示
-            if (song.source == MusicSource.SMB && onDownload != null) {
+            if (song.isCacheDownloadEligible && onDownload != null) {
                 AeroIconActionButton(
                     onClick = onDownload,
                     contentDescription = "Download",
