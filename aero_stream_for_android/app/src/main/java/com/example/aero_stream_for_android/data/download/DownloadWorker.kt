@@ -111,16 +111,22 @@ class DownloadWorker @AssistedInject constructor(
                 localPath = localFile.absolutePath
             )
 
-            // Song エンティティのソースを DOWNLOAD に更新
+            // Song エンティティをキャッシュ済みとして更新（sourceは維持）
+            val cachedAt = System.currentTimeMillis()
+            var updated = 0
             if (songId != -1L) {
-                songDao.getSongById(songId)?.let { song ->
-                    songDao.insertSong(
-                        song.copy(
-                            source = "DOWNLOAD",
-                            localPath = localFile.absolutePath
-                        )
-                    )
-                }
+                updated = songDao.markSongCachedById(
+                    songId = songId,
+                    localPath = localFile.absolutePath,
+                    timestamp = cachedAt
+                )
+            }
+            if (updated == 0) {
+                songDao.markSongCachedBySmbPath(
+                    smbPath = smbPath,
+                    localPath = localFile.absolutePath,
+                    timestamp = cachedAt
+                )
             }
 
             Result.success()

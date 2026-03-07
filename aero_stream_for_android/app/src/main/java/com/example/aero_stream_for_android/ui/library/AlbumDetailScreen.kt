@@ -1,24 +1,21 @@
 package com.example.aero_stream_for_android.ui.library
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -30,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -41,10 +39,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -54,16 +52,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import android.widget.Toast
+import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.PlayerState
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun AlbumDetailScreen(
@@ -75,6 +77,7 @@ fun AlbumDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val playerState by playerViewModel.playerState.collectAsState()
+    val context = LocalContext.current
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val collapseThresholdPx = with(density) { 240.dp.toPx() }
@@ -97,26 +100,30 @@ fun AlbumDetailScreen(
         onNavigateToPlayer()
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets.navigationBars
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(paddingValues)
+    LaunchedEffect(viewModel) {
+        viewModel.toastMessages.collectLatest { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(bottom = AeroCompactUiTokens.albumDetailListBottomPadding),
+            modifier = Modifier.fillMaxSize()
         ) {
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(bottom = AeroCompactUiTokens.albumDetailContentBottomPadding),
-                modifier = Modifier.fillMaxSize()
-            ) {
                 item {
                     AlbumDetailHeroSection(
                         title = uiState.album?.name.orEmpty(),
                         artwork = uiState.album?.albumArtUri,
-                        onPlay = { playAlbum() }
+                        onPlay = { playAlbum() },
+                        onDownload = viewModel::cacheAlbumTracks,
+                        downloadEnabled = uiState.isDownloadActionEnabled,
+                        isAlbumCached = uiState.isAlbumCached
                     )
                 }
 
@@ -144,6 +151,11 @@ fun AlbumDetailScreen(
                             song = song,
                             index = index,
                             playerState = playerState,
+                            downloadVisualState = if (song.source == MusicSource.SMB) {
+                                song.smbPath?.let(uiState.activeDownloadsBySmbPath::get)
+                            } else {
+                                null
+                            },
                             onClick = { playAlbum(index) }
                         )
                     }
@@ -151,44 +163,25 @@ fun AlbumDetailScreen(
                     item {
                         AlbumFooterSummary(summary = uiState.footerSummary)
                     }
-                }
-            }
 
-            AlbumDetailTopOverlay(
-                title = uiState.album?.name.orEmpty(),
-                artist = uiState.displayArtist,
-                subtitle = uiState.headerSubtitle,
-                collapsedProgress = collapsedProgress,
-                topInset = topInset,
-                onNavigateBack = onNavigateBack
-            )
-
-            AnimatedVisibility(
-                visible = isCollapsed && uiState.songs.isNotEmpty(),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        end = AeroCompactUiTokens.albumDetailHorizontalPadding,
-                        bottom = AeroCompactUiTokens.albumDetailFloatingPlayBottomPadding
-                    )
-            ) {
-                FilledIconButton(
-                    onClick = { playAlbum() },
-                    modifier = Modifier.size(AeroCompactUiTokens.albumDetailFloatingPlayButtonSize),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.onSurface,
-                        contentColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = "Play album",
-                        modifier = Modifier.size(42.dp)
-                    )
+                    item {
+                        AlbumBottomPlayShortcut(
+                            visible = isCollapsed && uiState.songs.isNotEmpty(),
+                            onPlay = { playAlbum() }
+                        )
+                    }
                 }
-            }
         }
+
+        AlbumDetailTopOverlay(
+            title = uiState.album?.name.orEmpty(),
+            artist = uiState.displayArtist,
+            subtitle = uiState.headerSubtitle,
+            collapsedProgress = collapsedProgress,
+            topInset = topInset,
+            onNavigateBack = onNavigateBack
+        )
+
     }
 }
 
@@ -281,7 +274,10 @@ private fun AlbumDetailTopOverlay(
 private fun AlbumDetailHeroSection(
     title: String,
     artwork: Any?,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onDownload: () -> Unit,
+    downloadEnabled: Boolean,
+    isAlbumCached: Boolean
 ) {
     Column(
         modifier = Modifier
@@ -292,37 +288,42 @@ private fun AlbumDetailHeroSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = AeroCompactUiTokens.albumDetailHorizontalPadding)
+                .padding(horizontal = AeroCompactUiTokens.albumDetailHorizontalPadding),
+            contentAlignment = Alignment.Center
         ) {
-            if (artwork != null) {
-                AsyncImage(
-                    model = artwork,
-                    contentDescription = "Album art",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = AeroCompactUiTokens.albumDetailArtworkMaxWidth)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(AeroCompactUiTokens.albumDetailArtworkCornerRadius))
-                        .align(Alignment.Center),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = AeroCompactUiTokens.albumDetailArtworkMaxWidth)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(AeroCompactUiTokens.albumDetailArtworkCornerRadius))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .align(Alignment.Center),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Album,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+            BoxWithConstraints {
+                val artworkSize = if (maxWidth < AeroCompactUiTokens.albumDetailArtworkMaxWidth) {
+                    maxWidth
+                } else {
+                    AeroCompactUiTokens.albumDetailArtworkMaxWidth
+                }
+
+                if (artwork != null) {
+                    AsyncImage(
+                        model = artwork,
+                        contentDescription = "Album art",
+                        modifier = Modifier
+                            .size(artworkSize)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(AeroCompactUiTokens.albumDetailArtworkCornerRadius)),
+                        contentScale = ContentScale.Crop
                     )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(artworkSize)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(AeroCompactUiTokens.albumDetailArtworkCornerRadius))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Album,
+                            contentDescription = null,
+                            modifier = Modifier.size(72.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -340,7 +341,12 @@ private fun AlbumDetailHeroSection(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        AlbumActionRow(onPlay = onPlay)
+        AlbumActionRow(
+            onPlay = onPlay,
+            onDownload = onDownload,
+            downloadEnabled = downloadEnabled,
+            isAlbumCached = isAlbumCached
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
     }
@@ -348,7 +354,10 @@ private fun AlbumDetailHeroSection(
 
 @Composable
 private fun AlbumActionRow(
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onDownload: () -> Unit,
+    downloadEnabled: Boolean,
+    isAlbumCached: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -357,7 +366,12 @@ private fun AlbumActionRow(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AlbumSecondaryActionButton(icon = Icons.Default.Download, label = "Download")
+        AlbumSecondaryActionButton(
+            icon = if (isAlbumCached) Icons.Default.CheckCircle else Icons.Default.Download,
+            label = if (isAlbumCached) "Cached" else "Download",
+            onClick = onDownload,
+            enabled = downloadEnabled
+        )
         AlbumSecondaryActionButton(icon = Icons.Default.Bookmark, label = "Bookmark")
 
         FilledIconButton(
@@ -372,7 +386,7 @@ private fun AlbumActionRow(
             Icon(
                 Icons.Default.PlayArrow,
                 contentDescription = "Play",
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(34.dp)
             )
         }
 
@@ -384,14 +398,16 @@ private fun AlbumActionRow(
 @Composable
 private fun AlbumSecondaryActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String
+    label: String,
+    onClick: () -> Unit = {},
+    enabled: Boolean = true
 ) {
     Surface(
         modifier = Modifier.size(AeroCompactUiTokens.albumDetailSecondaryActionButtonSize),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
     ) {
-        IconButton(onClick = { }) {
+        IconButton(onClick = onClick, enabled = enabled) {
             Icon(icon, contentDescription = label)
         }
     }
@@ -402,9 +418,12 @@ private fun AlbumTrackRow(
     song: Song,
     index: Int,
     playerState: PlayerState,
+    downloadVisualState: TrackDownloadVisualState?,
     onClick: () -> Unit
 ) {
     val isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying
+    val isDownloaded = song.isCached
+    val isSmbNotCached = song.source == MusicSource.SMB && !song.isCached
 
     Row(
         modifier = Modifier
@@ -416,12 +435,41 @@ private fun AlbumTrackRow(
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = (index + 1).toString(),
+        Box(
             modifier = Modifier.width(34.dp),
-            style = AeroCompactUiTokens.albumDetailTrackNumberTextStyle(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+            contentAlignment = Alignment.Center
+        ) {
+            if (downloadVisualState != null) {
+                if (downloadVisualState.progress != null) {
+                    CircularProgressIndicator(
+                        progress = { downloadVisualState.progress },
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = "Downloading",
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            } else {
+                Text(
+                    text = (index + 1).toString(),
+                    style = AeroCompactUiTokens.albumDetailTrackNumberTextStyle(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -437,14 +485,36 @@ private fun AlbumTrackRow(
             )
             Spacer(modifier = Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isPlaying) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
+                when {
+                    isDownloaded -> {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Downloaded",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+
+                    isPlaying -> {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+
+                    isSmbNotCached -> {
+                        Icon(
+                            Icons.Default.Cloud,
+                            contentDescription = "SMB",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
                 }
                 Text(
                     text = buildTrackSubtitle(song),
@@ -475,6 +545,42 @@ private fun AlbumFooterSummary(summary: String) {
             style = AeroCompactUiTokens.albumDetailFooterTextStyle(),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun AlbumBottomPlayShortcut(
+    visible: Boolean,
+    onPlay: () -> Unit
+) {
+    if (!visible) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = AeroCompactUiTokens.albumDetailHorizontalPadding,
+                end = AeroCompactUiTokens.albumDetailHorizontalPadding,
+                top = AeroCompactUiTokens.albumDetailBottomPlayTopPadding,
+                bottom = AeroCompactUiTokens.albumDetailBottomPlayBottomClearance
+            ),
+        horizontalArrangement = Arrangement.End
+    ) {
+        FilledIconButton(
+            onClick = onPlay,
+            modifier = Modifier.size(AeroCompactUiTokens.albumDetailFloatingPlayButtonSize),
+            shape = CircleShape,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.onSurface,
+                contentColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Icon(
+                Icons.Default.PlayArrow,
+                contentDescription = "Play album",
+                modifier = Modifier.size(34.dp)
+            )
+        }
     }
 }
 

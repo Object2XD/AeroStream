@@ -3,6 +3,7 @@ package com.example.aero_stream_for_android.data.download
 import android.content.Context
 import androidx.work.*
 import com.example.aero_stream_for_android.data.local.db.dao.DownloadDao
+import com.example.aero_stream_for_android.data.local.db.dao.SongDao
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadEntity
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,7 +19,8 @@ import javax.inject.Singleton
 @Singleton
 class DownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val downloadDao: DownloadDao
+    private val downloadDao: DownloadDao,
+    private val songDao: SongDao
 ) {
     private val workManager = WorkManager.getInstance(context)
 
@@ -73,6 +75,13 @@ class DownloadManager @Inject constructor(
     }
 
     /**
+     * 指定SMBパスのダウンロード履歴が存在するか確認する。
+     */
+    suspend fun hasDownloadEntry(smbPath: String): Boolean {
+        return downloadDao.getDownloadBySmbPath(smbPath) != null
+    }
+
+    /**
      * ダウンロードをキャンセルする。
      */
     suspend fun cancelDownload(downloadId: Long) {
@@ -91,6 +100,7 @@ class DownloadManager @Inject constructor(
             download.localCachePath?.let { path ->
                 File(path).delete()
             }
+            songDao.clearCacheBySmbPath(download.smbPath)
             downloadDao.deleteDownload(download)
         }
     }

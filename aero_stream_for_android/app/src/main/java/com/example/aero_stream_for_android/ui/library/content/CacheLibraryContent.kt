@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -24,8 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -47,20 +44,8 @@ fun CacheLibraryContent(
 ) {
     val uiState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
-    var searchQuery by rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
-
-    val filteredActiveDownloads = uiState.activeDownloads.filter { download ->
-        val fileName = download.smbPath.substringAfterLast('\\')
-        fileName.contains(searchQuery, ignoreCase = true) ||
-            download.smbPath.contains(searchQuery, ignoreCase = true) ||
-            (download.errorMessage?.contains(searchQuery, ignoreCase = true) == true)
-    }
-    val filteredDownloadedSongs = uiState.downloadedSongs.filter { song ->
-        song.title.contains(searchQuery, ignoreCase = true) ||
-            song.artist.contains(searchQuery, ignoreCase = true) ||
-            song.album.contains(searchQuery, ignoreCase = true) ||
-            (song.smbPath?.contains(searchQuery, ignoreCase = true) == true)
-    }
+    val activeDownloads = uiState.activeDownloads
+    val downloadedSongs = uiState.downloadedSongs
 
     if (uiState.isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -73,17 +58,7 @@ fun CacheLibraryContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp)
     ) {
-        item {
-            SearchRow(
-                isSearchMode = true,
-                query = searchQuery,
-                placeholder = "ダウンロードを検索",
-                onQueryChange = { searchQuery = it },
-                onToggleSearch = {}
-            )
-        }
-
-        if (filteredActiveDownloads.isNotEmpty()) {
+        if (activeDownloads.isNotEmpty()) {
             item {
                 Text(
                     text = "ダウンロード中",
@@ -92,7 +67,7 @@ fun CacheLibraryContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            items(filteredActiveDownloads) { download ->
+            items(activeDownloads) { download ->
                 androidx.compose.foundation.layout.Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -137,20 +112,20 @@ fun CacheLibraryContent(
             }
         }
 
-        if (filteredDownloadedSongs.isNotEmpty()) {
+        if (downloadedSongs.isNotEmpty()) {
             item {
                 Text(
-                    text = "ダウンロード済み（${filteredDownloadedSongs.size}曲）",
+                    text = "ダウンロード済み（${downloadedSongs.size}曲）",
                     style = AeroCompactUiTokens.sectionHeaderTextStyle(),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            items(filteredDownloadedSongs) { song ->
+            items(downloadedSongs) { song ->
                 SongListItem(
                     song = song,
                     onClick = {
-                        playerViewModel.playQueue(filteredDownloadedSongs, filteredDownloadedSongs.indexOf(song))
+                        playerViewModel.playQueue(downloadedSongs, downloadedSongs.indexOf(song))
                         onNavigateToPlayer()
                     },
                     isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying
@@ -158,7 +133,7 @@ fun CacheLibraryContent(
             }
         }
 
-        if (filteredDownloadedSongs.isEmpty() && filteredActiveDownloads.isEmpty()) {
+        if (downloadedSongs.isEmpty() && activeDownloads.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
@@ -168,16 +143,12 @@ fun CacheLibraryContent(
                 ) {
                     androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            if (searchQuery.isBlank()) Icons.Default.CloudDownload else Icons.Default.SearchOff,
+                            Icons.Default.CloudDownload,
                             contentDescription = null,
                             modifier = Modifier.padding(bottom = 16.dp)
                         )
                         Text(
-                            text = if (searchQuery.isBlank()) {
-                                "ダウンロード済みの楽曲はありません"
-                            } else {
-                                "\"$searchQuery\" に一致する項目はありません"
-                            },
+                            text = "ダウンロード済みの楽曲はありません",
                             style = MaterialTheme.typography.titleMedium
                         )
                     }

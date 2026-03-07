@@ -29,6 +29,7 @@ object DatabaseModule {
             .addMigrations(AeroDatabase.MIGRATION_2_3)
             .addMigrations(AeroDatabase.MIGRATION_3_4)
             .addMigrations(AeroDatabase.MIGRATION_4_5)
+            .addMigrations(AeroDatabase.MIGRATION_5_6)
             .build()
     }
 

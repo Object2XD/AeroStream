@@ -204,8 +204,7 @@ fun RootShell(
                         libraryFeatureState = rootState.libraryFeatureState,
                         onNavigateToPlayer = { showFullPlayer = true },
                         onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                        onNavigateBackFromSearch = { navController.popBackStack() },
-                        onNavigateToSmbBrowser = { navController.navigate(Screen.SmbBrowser.route) }
+                        onNavigateBackFromSearch = { navController.popBackStack() }
                     )
                 }
 

@@ -29,8 +29,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -38,14 +40,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,9 +63,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.aero_stream_for_android.data.remote.smb.HostValidationResult
@@ -79,10 +91,13 @@ private data class SettingsOptionItem(
     val onClick: () -> Unit
 )
 
+private const val SMB_SECTION_TAG = "settings_smb_section"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit = {},
+    onNavigateToSmbBrowser: (String) -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -174,7 +189,9 @@ fun SettingsScreen(
                         viewModel.clearConnectionTestResult()
                         editorConfig = config
                     },
-                    onDelete = { deleteTarget = it }
+                    onDelete = { deleteTarget = it },
+                    onRefresh = { configId -> viewModel.refreshSmbLibrary(configId) },
+                    onBrowse = onNavigateToSmbBrowser
                 )
             }
 
@@ -321,15 +338,23 @@ private fun SettingsSelectionListItem(
 }
 
 @Composable
-private fun SmbServersSection(
+internal fun SmbServersSection(
     smbConfigs: List<SmbConfig>,
     selectedSmbConfigId: String?,
     onSelect: (String) -> Unit,
     onAdd: () -> Unit,
     onEdit: (SmbConfig) -> Unit,
-    onDelete: (SmbConfig) -> Unit
+    onDelete: (SmbConfig) -> Unit,
+    onRefresh: (String) -> Unit,
+    onBrowse: (String) -> Unit
 ) {
-    Column {
+    Column(modifier = Modifier.testTag(SMB_SECTION_TAG)) {
+        Text(
+            text = "更新 / Browse は各SMB行から実行できます",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+        )
         if (smbConfigs.isEmpty()) {
             Text(
                 text = "SMBサーバーはまだ登録されていません",
@@ -339,36 +364,14 @@ private fun SmbServersSection(
             )
         } else {
             smbConfigs.forEach { config ->
-                ListItem(
-                    modifier = Modifier.clickable { onSelect(config.id) },
-                    headlineContent = { Text(config.displayName) },
-                    supportingContent = {
-                        Text(
-                            buildString {
-                                append("${config.hostname}/${config.shareName}")
-                                if (config.rootPath.isNotBlank()) {
-                                    append("/${config.rootPath}")
-                                }
-                            }
-                        )
-                    },
-                    leadingContent = {
-                        if (selectedSmbConfigId == config.id) {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                        } else {
-                            Icon(Icons.Default.Storage, contentDescription = null)
-                        }
-                    },
-                    trailingContent = {
-                        Row {
-                            IconButton(onClick = { onEdit(config) }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit")
-                            }
-                            IconButton(onClick = { onDelete(config) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete")
-                            }
-                        }
-                    }
+                SmbServerCard(
+                    config = config,
+                    isSelected = selectedSmbConfigId == config.id,
+                    onSelect = { onSelect(config.id) },
+                    onRefresh = { onRefresh(config.id) },
+                    onBrowse = { onBrowse(config.id) },
+                    onEdit = { onEdit(config) },
+                    onDelete = { onDelete(config) }
                 )
             }
         }
@@ -381,6 +384,172 @@ private fun SmbServersSection(
             Spacer(modifier = Modifier.width(8.dp))
             Text("SMBを追加")
         }
+    }
+}
+
+@Composable
+private fun SmbServerCard(
+    config: SmbConfig,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onRefresh: () -> Unit,
+    onBrowse: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val hostShare = "${config.hostname}/${config.shareName}"
+    val rootPathLabel = config.rootPath.ifBlank { null }?.let { "/$it" }
+    val topDescription = buildString {
+        append("${config.displayName} ")
+        append(hostShare)
+        rootPathLabel?.let { append(" $it") }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clickable(onClick = onSelect)
+                    .semantics(mergeDescendants = true) {
+                        role = Role.Button
+                        contentDescription = topDescription
+                        stateDescription = if (isSelected) "選択中" else "未選択"
+                    }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .testTag("smb_${config.id}_status_icon"),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Storage,
+                        contentDescription = null
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Text(
+                        text = config.displayName.ifBlank { "SMB" },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.testTag("smb_${config.id}_title")
+                    )
+                    Text(
+                        text = hostShare,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    rootPathLabel?.let { root ->
+                        Text(
+                            text = root,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .width(58.dp)
+                        .testTag("smb_${config.id}_top_anchor"),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    if (isSelected) {
+                        Text(
+                            text = "選択中",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SmbActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = { Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    contentDescription = "更新: ${config.displayName}",
+                    onClick = onRefresh
+                )
+                SmbActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    contentDescription = "Browse: ${config.displayName}",
+                    onClick = onBrowse
+                )
+                SmbActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    contentDescription = "編集: ${config.displayName}",
+                    onClick = onEdit
+                )
+                OutlinedButton(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .semantics {
+                            contentDescription = "削除: ${config.displayName}"
+                        },
+                    onClick = onDelete
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmbActionButton(
+    modifier: Modifier = Modifier,
+    icon: @Composable () -> Unit,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    FilledTonalButton(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .semantics {
+                this.contentDescription = contentDescription
+            },
+        onClick = onClick
+    ) {
+        icon()
     }
 }
 

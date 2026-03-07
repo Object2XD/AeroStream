@@ -3,7 +3,6 @@ package com.example.aero_stream_for_android.ui.smb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aero_stream_for_android.data.smb.SmbScanProgress
-import com.example.aero_stream_for_android.data.smb.SmbScanStage
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
 import com.example.aero_stream_for_android.domain.model.Album
@@ -129,12 +128,7 @@ class SmbLibraryViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isRefreshing = progress.isRunning,
-                        scanProgress = progress,
-                        error = when {
-                            progress.stage == SmbScanStage.FAILED -> progress.message
-                            progress.stage == SmbScanStage.CANCELLED -> null
-                            else -> it.error
-                        }
+                        scanProgress = progress
                     )
                 }
             }

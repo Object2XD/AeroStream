@@ -49,7 +49,15 @@ sealed class Screen(
         title = "SMB",
         selectedIcon = Icons.Filled.Cloud,
         unselectedIcon = Icons.Outlined.Cloud
-    )
+    ) {
+        const val configIdArg = "configId"
+        val routePattern = "$route?$configIdArg={$configIdArg}"
+
+        fun createRoute(configId: String?): String {
+            val encodedConfigId = Uri.encode(configId.orEmpty())
+            return "$route?$configIdArg=$encodedConfigId"
+        }
+    }
 
     data object SmbLibrary : Screen(
         route = "smb_library",

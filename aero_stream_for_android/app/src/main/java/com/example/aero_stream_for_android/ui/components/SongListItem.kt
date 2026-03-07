@@ -103,26 +103,25 @@ fun SongListItem(
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // ソースバッジ
-                when (song.source) {
-                    MusicSource.SMB -> {
+                when {
+                    song.isCached -> {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Downloaded",
+                            modifier = Modifier.size(10.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    song.source == MusicSource.SMB -> {
                         Icon(
                             Icons.Default.Cloud,
                             contentDescription = "SMB",
                             modifier = Modifier.size(10.dp),
-                            tint = SmbSourceColor
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                     }
-                    MusicSource.DOWNLOAD -> {
-                        Icon(
-                            Icons.Default.DownloadDone,
-                            contentDescription = "Downloaded",
-                            modifier = Modifier.size(10.dp),
-                            tint = DownloadSourceColor
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    else -> {}
                 }
                 Text(
                     text = "${song.artist} · ${formatDuration(song.duration)}",
@@ -135,7 +134,7 @@ fun SongListItem(
         }
 
         // ダウンロードアイコン（SMBソースの場合）
-        if (showDownloadIcon && song.source == MusicSource.SMB) {
+        if (showDownloadIcon && song.source == MusicSource.SMB && !song.isCached) {
             IconButton(onClick = { /* ダウンロード処理 */ }) {
                 Icon(
                     Icons.Default.Download,

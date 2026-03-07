@@ -24,8 +24,7 @@ fun AeroNavGraph(
     libraryFeatureState: LibraryFeatureState,
     onNavigateToPlayer: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
-    onNavigateBackFromSearch: () -> Unit = {},
-    onNavigateToSmbBrowser: () -> Unit = {}
+    onNavigateBackFromSearch: () -> Unit = {}
 ) {
     NavHost(
         navController = navController,
@@ -47,7 +46,6 @@ fun AeroNavGraph(
             LibraryRouteScreen(
                 featureState = libraryFeatureState,
                 onNavigateToPlayer = onNavigateToPlayer,
-                onNavigateToSmbBrowser = onNavigateToSmbBrowser,
                 onNavigateToAlbumDetail = { album, source, smbConfigId ->
                     navController.navigate(
                         Screen.AlbumDetail.createRoute(
@@ -69,7 +67,15 @@ fun AeroNavGraph(
             )
         }
 
-        composable(Screen.SmbBrowser.route) {
+        composable(
+            route = Screen.SmbBrowser.routePattern,
+            arguments = listOf(
+                navArgument(Screen.SmbBrowser.configIdArg) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) {
             SmbBrowserScreen(
                 onNavigateToPlayer = onNavigateToPlayer
             )
@@ -99,7 +105,10 @@ fun AeroNavGraph(
 
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSmbBrowser = { configId ->
+                    navController.navigate(Screen.SmbBrowser.createRoute(configId))
+                }
             )
         }
     }

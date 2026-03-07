@@ -33,6 +33,12 @@ data class Song(
     val mimeType: String? = null,
     /** SMBファイルの最終書き込み時刻（エポックミリ秒） */
     val smbLastWriteTime: Long = 0L,
+    /** ローカルキャッシュ済みか */
+    val isCached: Boolean = false,
+    /** キャッシュ完了時刻 */
+    val cachedAt: Long? = null,
+    /** キャッシュ音源の最終再生時刻 */
+    val cacheLastPlayedAt: Long? = null,
     /** ソースの最終更新時刻 */
     val sourceUpdatedAt: Long? = null,
     /** 最終再生日時 */

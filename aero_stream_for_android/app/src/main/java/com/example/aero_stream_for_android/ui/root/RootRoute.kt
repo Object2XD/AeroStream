@@ -33,7 +33,7 @@ fun routeToAppRoute(route: String?): AppRoute? = when {
     route == Screen.Library.route -> LibraryRoute
     route == Screen.Search.route -> SearchRoute
     route == Screen.Settings.route -> SettingsRoute
-    route == Screen.SmbBrowser.route -> SmbBrowserRoute
+    route.startsWith(Screen.SmbBrowser.route) -> SmbBrowserRoute
     route.startsWith(Screen.AlbumDetail.route) -> AlbumDetailRoute("", "", "", "", "")
     else -> null
 }

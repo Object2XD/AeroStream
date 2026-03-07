@@ -104,6 +104,9 @@ class SmbLibraryRepository @Inject constructor(
                             fileSize = entity.fileSize,
                             mimeType = entity.mimeType,
                             smbLastWriteTime = entity.smbLastWriteTime,
+                            isCached = entity.isCached,
+                            cachedAt = entity.cachedAt,
+                            cacheLastPlayedAt = entity.cacheLastPlayedAt,
                             sourceUpdatedAt = entity.sourceUpdatedAt,
                             lastPlayedAt = entity.lastPlayedAt,
                             playCount = entity.playCount
@@ -214,6 +217,9 @@ class SmbLibraryRepository @Inject constructor(
         fileSize = fileSize,
         mimeType = mimeType,
         smbLastWriteTime = smbLastWriteTime,
+        isCached = isCached,
+        cachedAt = cachedAt,
+        cacheLastPlayedAt = cacheLastPlayedAt,
         lastPlayedAt = lastPlayedAt,
         playCount = playCount,
         sourceUpdatedAt = sourceUpdatedAt

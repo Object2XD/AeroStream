@@ -11,7 +11,6 @@ import com.example.aero_stream_for_android.ui.library.content.SmbLibraryContent
 @Composable
 fun SmbLibraryScreen(
     onNavigateToPlayer: () -> Unit = {},
-    onNavigateToBrowser: () -> Unit = {},
     onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> }
 ) {
     SmbLibraryContent(
@@ -20,7 +19,6 @@ fun SmbLibraryScreen(
             category = LibraryCategory.Songs
         ),
         onNavigateToPlayer = onNavigateToPlayer,
-        onNavigateToSmbBrowser = onNavigateToBrowser,
         onNavigateToAlbumDetail = onNavigateToAlbumDetail
     )
 }

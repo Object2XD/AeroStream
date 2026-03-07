@@ -46,6 +46,7 @@ class UserPreferencesDataStore @Inject constructor(
         val LAST_POSITION = longPreferencesKey("last_position")
         val SHUFFLE_ENABLED = booleanPreferencesKey("shuffle_enabled")
         val REPEAT_MODE = stringPreferencesKey("repeat_mode")
+        val LAST_NOTIFIED_SMB_SCAN_FAILURE_KEY = stringPreferencesKey("last_notified_smb_scan_failure_key")
     }
 
     val audioEngine: Flow<AudioEngine> = context.dataStore.data.map { prefs ->
@@ -234,6 +235,16 @@ class UserPreferencesDataStore @Inject constructor(
     suspend fun setRepeatMode(mode: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.REPEAT_MODE] = mode
+        }
+    }
+
+    suspend fun getLastNotifiedSmbScanFailureKey(): String? {
+        return context.dataStore.data.first()[Keys.LAST_NOTIFIED_SMB_SCAN_FAILURE_KEY]
+    }
+
+    suspend fun setLastNotifiedSmbScanFailureKey(key: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_NOTIFIED_SMB_SCAN_FAILURE_KEY] = key
         }
     }
 

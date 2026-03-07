@@ -81,7 +81,8 @@ AppRoot
    │       ├─ LibraryState
    │           ├─ source: {LocalFiles | SMB | Cache}
    │           ├─ category: {Albums | AlbumArtists | Artists | Genres | Years}
-   │           └─ sort: { key:{Name|AddedDate|LastPlayed|Year}, order:{Asc|Desc} }
+   │           ├─ sort: { key:{Name|AddedDate|LastPlayed|Year}, order:{Asc|Desc} }
+   │           └─ in-content search: none (use global SearchRoute only)
    │       └─ SearchState
    │           ├─ query: String
    │           ├─ recentSearches: DataStore(max=10, dedupe)
@@ -120,6 +121,7 @@ AppRoot
    │               │              └─ LibraryScreenContent (Insets禁止)
    │               │                  └─ PrimaryVerticalScrollContainer (single vertical)
    │               │          ├─ AlbumDetailRoute (Primary扱い)
+   │               │          │   └─ hero artwork: fixed 300dp max, clamped by available width, centered
    │               │          ├─ SearchRoute (NonPrimary, BottomNav visible)
    │               │          ├─ SettingsRoute (NonPrimary)
    │               │          └─ SmbBrowserRoute (temporary: BottomNav visible)
@@ -182,6 +184,7 @@ AppRoot
 - Root以外の `statusBarsPadding/systemBarsPadding/windowInsetsPadding` を禁止
 - `TopAppBar/NavigationBar` は `windowInsets = WindowInsets(0)` 固定（共通コンポーネント経由のみ）
 - 各画面 `Scaffold` は `contentWindowInsets = WindowInsets(0)` を明示（Rootとの二重Insets禁止）
+- `AlbumDetailScreen` は画面内 `Scaffold` を持たず、Rootの `InsetsHost + RootScaffold(innerPadding)` に完全追従する
 
 ### R2. Header overlay + dynamic content padding
 - HeaderはContent上に重ねる（Scaffold topBar不使用）
@@ -201,6 +204,17 @@ AppRoot
 R6. Overlay behavior
 - BottomCard(ModalBottomSheet)はOverlayHostのみ、single-flight、Back最優先
 - Overlay表示中は nestedScroll を無効化して体感を安定化
+
+R6.5 AlbumDetail hero sizing
+- hero artwork は固定300dp上限で描画し、端末の利用可能幅を超える場合のみクランプする
+- artwork本体の `Modifier` に `fillMaxWidth` を使わない（幅確定を壊さない）
+- artwork は常に中央配置する
+
+R6.6 AlbumDetail bottom play shortcut spacing
+- `albumDetailBottomPlayTopPadding` は footer summary と再生ボタンの距離のみを制御する
+- `albumDetailBottomPlayBottomClearance` は再生ボタンと下部UI（MiniPlayer/BottomNav）間のクリアランスを制御する
+- `albumDetailListBottomPadding` は LazyColumn 全体の末尾余白を制御する（既定値は 0dp）
+- 再生ボタンの下位置調整は `albumDetailBottomPlayBottomClearance` を使用し、`contentPadding.bottom` に依存させない
 
 R7. SystemBar color ownership (edge-to-edge)
 - enableEdgeToEdge は維持する

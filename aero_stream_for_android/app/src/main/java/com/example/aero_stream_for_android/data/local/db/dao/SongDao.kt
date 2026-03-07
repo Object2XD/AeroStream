@@ -13,6 +13,9 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE source = :source ORDER BY title ASC")
     fun getSongsBySource(source: String): Flow<List<SongEntity>>
 
+    @Query("SELECT * FROM songs WHERE source = 'SMB' AND isCached = 1 ORDER BY title ASC")
+    fun getCachedSmbSongs(): Flow<List<SongEntity>>
+
     @Query(
         """
         SELECT * FROM songs
@@ -97,6 +100,17 @@ interface SongDao {
         """
         SELECT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count
         FROM songs
+        WHERE source = :source
+        GROUP BY album, albumArtist
+        ORDER BY album ASC
+        """
+    )
+    fun getAlbumsBySource(source: String): Flow<List<AlbumInfo>>
+
+    @Query(
+        """
+        SELECT album, albumArtist, MIN(albumArtUri) as albumArtUri, COUNT(*) as count
+        FROM songs
         WHERE source = :source AND smbConfigId = :smbConfigId
         GROUP BY album, albumArtist
         ORDER BY album ASC
@@ -121,6 +135,17 @@ interface SongDao {
 
     @Query("SELECT DISTINCT artist, COUNT(*) as songCount FROM songs GROUP BY artist ORDER BY artist ASC")
     fun getArtists(): Flow<List<ArtistInfo>>
+
+    @Query(
+        """
+        SELECT artist, COUNT(*) as songCount
+        FROM songs
+        WHERE source = :source
+        GROUP BY artist
+        ORDER BY artist ASC
+        """
+    )
+    fun getArtistsBySource(source: String): Flow<List<ArtistInfo>>
 
     @Query(
         """
@@ -199,6 +224,55 @@ interface SongDao {
     @Query("UPDATE songs SET lastPlayedAt = :timestamp, playCount = playCount + 1 WHERE id = :songId")
     suspend fun updatePlayStats(songId: Long, timestamp: Long = System.currentTimeMillis())
 
+    @Query("UPDATE songs SET cacheLastPlayedAt = :timestamp WHERE id = :songId AND isCached = 1")
+    suspend fun updateCacheLastPlayedAt(songId: Long, timestamp: Long = System.currentTimeMillis())
+
+    @Query(
+        """
+        UPDATE songs
+        SET isCached = 1,
+            cachedAt = :timestamp,
+            localPath = :localPath
+        WHERE id = :songId
+        """
+    )
+    suspend fun markSongCachedById(songId: Long, localPath: String, timestamp: Long): Int
+
+    @Query(
+        """
+        UPDATE songs
+        SET isCached = 1,
+            cachedAt = :timestamp,
+            localPath = :localPath
+        WHERE smbPath = :smbPath
+        """
+    )
+    suspend fun markSongCachedBySmbPath(smbPath: String, localPath: String, timestamp: Long): Int
+
+    @Query(
+        """
+        UPDATE songs
+        SET isCached = 0,
+            cachedAt = NULL,
+            cacheLastPlayedAt = NULL,
+            localPath = NULL
+        WHERE smbPath = :smbPath
+        """
+    )
+    suspend fun clearCacheBySmbPath(smbPath: String)
+
+    @Query(
+        """
+        SELECT id, smbPath, localPath, cachedAt, cacheLastPlayedAt
+        FROM songs
+        WHERE source = 'SMB'
+          AND isCached = 1
+          AND COALESCE(cacheLastPlayedAt, cachedAt) IS NOT NULL
+          AND COALESCE(cacheLastPlayedAt, cachedAt) < :threshold
+        """
+    )
+    suspend fun getCachedSongsForCleanup(threshold: Long): List<CachedSongRecord>
+
     @Query("SELECT * FROM songs WHERE localPath = :path LIMIT 1")
     suspend fun getSongByLocalPath(path: String): SongEntity?
 
@@ -227,4 +301,12 @@ data class AlbumInfo(
 data class ArtistInfo(
     val artist: String,
     val songCount: Int
+)
+
+data class CachedSongRecord(
+    val id: Long,
+    val smbPath: String?,
+    val localPath: String?,
+    val cachedAt: Long?,
+    val cacheLastPlayedAt: Long?
 )

@@ -75,10 +75,16 @@ class SmbLibraryScanManager @Inject constructor(
         return SmbScanProgress(
             isRunning = state == WorkInfo.State.RUNNING || state == WorkInfo.State.ENQUEUED,
             stage = stage,
+            elapsedSec = data.getLong(SmbLibraryScanWorker.KEY_ELAPSED_SEC, 0L).coerceAtLeast(0L),
+            processedCount = data.getInt(SmbLibraryScanWorker.KEY_PROCESSED_COUNT, 0),
             scannedCount = data.getInt(SmbLibraryScanWorker.KEY_SCANNED_COUNT, 0),
             failedCount = data.getInt(SmbLibraryScanWorker.KEY_FAILED_COUNT, 0),
             skippedDirectories = data.getInt(SmbLibraryScanWorker.KEY_SKIPPED_DIRECTORIES, 0),
             totalCount = data.getInt(SmbLibraryScanWorker.KEY_TOTAL_COUNT, 0),
+            progressPercent = data.getInt(SmbLibraryScanWorker.KEY_PROGRESS_PERCENT, -1)
+                .takeIf { it >= 0 },
+            estimatedRemainingSec = data.getLong(SmbLibraryScanWorker.KEY_ESTIMATED_REMAINING_SEC, -1L)
+                .takeIf { it >= 0L },
             message = data.getString(SmbLibraryScanWorker.KEY_RESULT_MESSAGE).orEmpty(),
             smbConfigId = smbConfigId
         )

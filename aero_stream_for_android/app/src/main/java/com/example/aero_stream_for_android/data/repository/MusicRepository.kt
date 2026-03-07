@@ -33,6 +33,11 @@ class MusicRepository @Inject constructor(
             entities.map { it.toDomain() }
         }
 
+    fun getCachedSmbSongs(): Flow<List<Song>> =
+        songDao.getCachedSmbSongs().map { entities ->
+            entities.map { it.toDomain() }
+        }
+
     fun getSongsByAlbum(album: String, albumArtist: String): Flow<List<Song>> =
         songDao.getSongsByAlbum(album, albumArtist).map { entities ->
             entities.map { it.toDomain() }
@@ -117,6 +122,20 @@ class MusicRepository @Inject constructor(
             }
         }
 
+    fun getAlbumsBySource(source: MusicSource): Flow<List<Album>> =
+        songDao.getAlbumsBySource(source.name).map { albumInfos ->
+            albumInfos.mapIndexed { index, info ->
+                Album(
+                    id = index.toLong(),
+                    name = info.album,
+                    artist = info.albumArtist,
+                    albumArtist = info.albumArtist,
+                    albumArtUri = info.albumArtUri?.let { Uri.parse(it) },
+                    songCount = info.count
+                )
+            }
+        }
+
     fun getAlbumsBySourceAndSmbConfig(source: MusicSource, smbConfigId: String): Flow<List<Album>> =
         songDao.getAlbumsBySourceAndSmbConfig(source.name, smbConfigId).map { albumInfos ->
             albumInfos.mapIndexed { index, info ->
@@ -154,6 +173,17 @@ class MusicRepository @Inject constructor(
      */
     fun getArtists(): Flow<List<Artist>> =
         songDao.getArtists().map { artistInfos ->
+            artistInfos.mapIndexed { index, info ->
+                Artist(
+                    id = index.toLong(),
+                    name = info.artist,
+                    songCount = info.songCount
+                )
+            }
+        }
+
+    fun getArtistsBySource(source: MusicSource): Flow<List<Artist>> =
+        songDao.getArtistsBySource(source.name).map { artistInfos ->
             artistInfos.mapIndexed { index, info ->
                 Artist(
                     id = index.toLong(),
@@ -202,7 +232,9 @@ class MusicRepository @Inject constructor(
      * 楽曲の再生統計を更新する。
      */
     suspend fun updatePlayStats(songId: Long) {
-        songDao.updatePlayStats(songId)
+        val now = System.currentTimeMillis()
+        songDao.updatePlayStats(songId, now)
+        songDao.updateCacheLastPlayedAt(songId, now)
     }
 
     /**
@@ -246,6 +278,9 @@ class MusicRepository @Inject constructor(
         fileSize = fileSize,
         mimeType = mimeType,
         smbLastWriteTime = smbLastWriteTime,
+        isCached = isCached,
+        cachedAt = cachedAt,
+        cacheLastPlayedAt = cacheLastPlayedAt,
         sourceUpdatedAt = sourceUpdatedAt,
         lastPlayedAt = lastPlayedAt,
         playCount = playCount
@@ -269,6 +304,9 @@ class MusicRepository @Inject constructor(
         fileSize = fileSize,
         mimeType = mimeType,
         smbLastWriteTime = smbLastWriteTime,
+        isCached = isCached,
+        cachedAt = cachedAt,
+        cacheLastPlayedAt = cacheLastPlayedAt,
         lastPlayedAt = lastPlayedAt,
         playCount = playCount,
         sourceUpdatedAt = sourceUpdatedAt

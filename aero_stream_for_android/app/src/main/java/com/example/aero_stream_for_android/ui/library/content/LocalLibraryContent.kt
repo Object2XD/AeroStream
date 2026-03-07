@@ -1,6 +1,5 @@
 package com.example.aero_stream_for_android.ui.library.content
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,10 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -36,17 +33,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.Artist
 import com.example.aero_stream_for_android.domain.model.MusicSource
@@ -71,37 +64,18 @@ fun LocalLibraryContent(
 ) {
     val uiState by libraryViewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
-    var isSearchMode by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
-    val normalizedQuery = searchQuery.trim()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp)
     ) {
-        item {
-            SearchRow(
-                isSearchMode = isSearchMode,
-                query = searchQuery,
-                placeholder = "ライブラリを検索",
-                onQueryChange = { searchQuery = it },
-                onToggleSearch = {
-                    isSearchMode = !isSearchMode
-                    if (!isSearchMode) {
-                        searchQuery = ""
-                    }
-                }
-            )
-        }
-
         when (featureState.category) {
             LibraryCategory.Songs -> {
                 val songs = uiState.songs
-                    .filterBySearch(normalizedQuery) { listOf(it.title, it.artist, it.album) }
                     .sortedWith(songComparator(featureState.sort.key, featureState.sort.order))
                 if (songs.isEmpty()) {
-                    item { EmptyState(if (normalizedQuery.isBlank()) "曲はまだありません" else "条件に一致する曲はありません") }
+                    item { EmptyState("曲はまだありません") }
                 } else {
                     items(songs) { song ->
                         SongListItem(
@@ -119,10 +93,9 @@ fun LocalLibraryContent(
 
             LibraryCategory.Albums -> {
                 val albums = uiState.albums
-                    .filterBySearch(normalizedQuery) { listOf(it.name, it.artist, it.year?.toString().orEmpty()) }
                     .sortedWith(albumComparator(featureState.sort.key, featureState.sort.order))
                 if (albums.isEmpty()) {
-                    item { EmptyState(if (normalizedQuery.isBlank()) "アルバムはまだありません" else "条件に一致するアルバムはありません") }
+                    item { EmptyState("アルバムはまだありません") }
                 } else {
                     items(albums) { album ->
                         AlbumRow(
@@ -135,10 +108,9 @@ fun LocalLibraryContent(
 
             LibraryCategory.Artists -> {
                 val artists = uiState.artists
-                    .filterBySearch(normalizedQuery) { listOf(it.name) }
                     .sortedWith(artistComparator(featureState.sort.key, featureState.sort.order))
                 if (artists.isEmpty()) {
-                    item { EmptyState(if (normalizedQuery.isBlank()) "アーティストはまだありません" else "条件に一致するアーティストはありません") }
+                    item { EmptyState("アーティストはまだありません") }
                 } else {
                     items(artists) { artist ->
                         ArtistRow(artist)
@@ -148,7 +120,6 @@ fun LocalLibraryContent(
 
             LibraryCategory.Playlists -> {
                 val playlists = uiState.playlists
-                    .filterBySearch(normalizedQuery) { listOf(it.name) }
                     .sortedWith(playlistComparator(featureState.sort.key, featureState.sort.order))
                 item {
                     Button(
@@ -161,7 +132,7 @@ fun LocalLibraryContent(
                     }
                 }
                 if (playlists.isEmpty()) {
-                    item { EmptyState(if (normalizedQuery.isBlank()) "プレイリストはまだありません" else "条件に一致するプレイリストはありません") }
+                    item { EmptyState("プレイリストはまだありません") }
                 } else {
                     items(playlists) { playlist ->
                         PlaylistRow(
@@ -211,59 +182,6 @@ fun LocalLibraryContent(
                 }
             }
         )
-    }
-}
-
-@Composable
-internal fun SearchRow(
-    isSearchMode: Boolean,
-    query: String,
-    placeholder: String,
-    onQueryChange: (String) -> Unit,
-    onToggleSearch: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(
-                start = AeroCompactUiTokens.screenHorizontalPadding,
-                end = AeroCompactUiTokens.screenHorizontalPadding,
-                top = 8.dp,
-                bottom = 12.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (isSearchMode) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                placeholder = { Text(placeholder) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear")
-                        }
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            )
-        } else {
-            Text(
-                text = "検索",
-                style = AeroCompactUiTokens.sectionHeaderTextStyle(),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        IconButton(onClick = onToggleSearch) {
-            Icon(
-                imageVector = if (isSearchMode) Icons.Default.Clear else Icons.Default.Search,
-                contentDescription = if (isSearchMode) "Close search" else "Search"
-            )
-        }
     }
 }
 
@@ -354,33 +272,6 @@ private fun PlaylistRow(playlist: Playlist, onDelete: () -> Unit) {
 }
 
 @Composable
-private fun MediaArtwork(imageModel: Any?, placeholder: androidx.compose.ui.graphics.vector.ImageVector) {
-    Box(
-        modifier = Modifier
-            .size(AeroCompactUiTokens.listArtworkSize)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-    ) {
-        if (imageModel != null) {
-            AsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(placeholder, contentDescription = null)
-            }
-        }
-    }
-}
-
-@Composable
 internal fun EmptyState(title: String) {
     Box(
         modifier = Modifier
@@ -394,11 +285,6 @@ internal fun EmptyState(title: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
-}
-
-internal fun <T> List<T>.filterBySearch(query: String, selector: (T) -> List<String>): List<T> {
-    if (query.isBlank()) return this
-    return filter { item -> selector(item).any { it.contains(query, ignoreCase = true) } }
 }
 
 internal fun songComparator(key: LibrarySortKey, order: SortOrder): Comparator<Song> =

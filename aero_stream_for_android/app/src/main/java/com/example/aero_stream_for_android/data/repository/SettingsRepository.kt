@@ -43,6 +43,9 @@ class SettingsRepository @Inject constructor(
         preferencesDataStore.setSelectedSmbLibraryBuckets(smbConfigId, buckets)
     suspend fun setShuffleEnabled(enabled: Boolean) = preferencesDataStore.setShuffleEnabled(enabled)
     suspend fun setRepeatMode(mode: String) = preferencesDataStore.setRepeatMode(mode)
+    suspend fun getLastNotifiedSmbScanFailureKey() = preferencesDataStore.getLastNotifiedSmbScanFailureKey()
+    suspend fun setLastNotifiedSmbScanFailureKey(key: String) =
+        preferencesDataStore.setLastNotifiedSmbScanFailureKey(key)
 
     suspend fun saveLastQueue(songIds: List<Long>, currentIndex: Int, position: Long) =
         preferencesDataStore.saveLastQueue(songIds, currentIndex, position)

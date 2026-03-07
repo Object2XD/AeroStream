@@ -6,6 +6,7 @@ import com.example.aero_stream_for_android.data.repository.MusicRepository
 import com.example.aero_stream_for_android.data.repository.PlaylistRepository
 import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.Artist
+import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Playlist
 import com.example.aero_stream_for_android.domain.model.Song
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,17 +38,17 @@ class LibraryViewModel @Inject constructor(
 
     private fun loadLibraryData() {
         viewModelScope.launch {
-            musicRepository.getAllSongs().collect { songs ->
+            musicRepository.getSongsBySource(MusicSource.LOCAL).collect { songs ->
                 _uiState.update { it.copy(songs = songs, isLoading = false) }
             }
         }
         viewModelScope.launch {
-            musicRepository.getAlbums().collect { albums ->
+            musicRepository.getAlbumsBySource(MusicSource.LOCAL).collect { albums ->
                 _uiState.update { it.copy(albums = albums) }
             }
         }
         viewModelScope.launch {
-            musicRepository.getArtists().collect { artists ->
+            musicRepository.getArtistsBySource(MusicSource.LOCAL).collect { artists ->
                 _uiState.update { it.copy(artists = artists) }
             }
         }

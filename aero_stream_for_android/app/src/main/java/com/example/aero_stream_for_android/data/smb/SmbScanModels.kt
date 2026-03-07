@@ -16,16 +16,21 @@ enum class SmbScanStage(val label: String) {
 data class SmbScanProgress(
     val isRunning: Boolean = false,
     val stage: SmbScanStage = SmbScanStage.IDLE,
+    val elapsedSec: Long = 0L,
+    val processedCount: Int = 0,
     val scannedCount: Int = 0,
     val failedCount: Int = 0,
     val skippedDirectories: Int = 0,
     val totalCount: Int = 0,
+    val progressPercent: Int? = null,
+    val estimatedRemainingSec: Long? = null,
     val message: String = "",
     val smbConfigId: String? = null
 )
 
 data class ScanProgressEvent(
     val stage: SmbScanStage,
+    val processedCount: Int = 0,
     val scannedCount: Int = 0,
     val failedCount: Int = 0,
     val skippedDirectories: Int = 0,

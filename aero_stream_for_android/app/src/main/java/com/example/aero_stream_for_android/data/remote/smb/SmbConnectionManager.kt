@@ -22,6 +22,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.EnumSet
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -51,35 +52,48 @@ class SmbConnectionManager @Inject constructor() {
         private const val TAG = "SmbConnectionManager"
     }
 
-    private var client: SMBClient? = null
-    private var connection: Connection? = null
-    private var session: Session? = null
-    @Volatile private var share: DiskShare? = null
-    @Volatile private var currentConfig: SmbConfig? = null
-    private val mutex = Mutex()
+    private data class ConnectionEntry(
+        var client: SMBClient? = null,
+        var connection: Connection? = null,
+        var session: Session? = null,
+        @Volatile var share: DiskShare? = null,
+        @Volatile var currentConfig: SmbConfig? = null,
+        val mutex: Mutex = Mutex()
+    )
+
+    private val entries = ConcurrentHashMap<String, ConnectionEntry>()
+    private val entriesMutex = Mutex()
 
     /**
      * SMBサーバーに接続してDiskShareを返す。
      * 既に接続済みの場合はロックなしでキャッシュされた接続を返す。
      */
     suspend fun getShare(config: SmbConfig): DiskShare {
-        // Fast path: 接続済みならロック不要で返却
-        if (currentConfig == config && isConnected()) {
-            share?.let { return it }
+        val configKey = config.connectionKey()
+        val entry = getOrCreateEntry(configKey)
+
+        if (entry.currentConfig == config && isConnected(entry)) {
+            entry.share?.let { return it }
         }
-        // Slow path: 再接続が必要な場合のみロック取得
-        return mutex.withLock {
+
+        return entry.mutex.withLock {
             withContext(Dispatchers.IO) {
-                if (currentConfig != config || !isConnected()) {
-                    disconnect()
-                    connect(config)
+                if (entry.currentConfig != config || !isConnected(entry)) {
+                    disconnectEntry(entry)
+                    connect(entry, config)
                 }
-                share ?: throw IllegalStateException("Failed to connect to SMB share")
+                entry.share ?: throw IllegalStateException("Failed to connect to SMB share")
             }
         }
     }
 
-    private fun connect(config: SmbConfig) {
+    private suspend fun getOrCreateEntry(key: String): ConnectionEntry {
+        return entriesMutex.withLock {
+            entries.getOrPut(key) { ConnectionEntry() }
+        }
+    }
+
+    private fun connect(entry: ConnectionEntry, config: SmbConfig) {
         val smbConfig = SmbJConfig.builder()
             .withTimeout(30, TimeUnit.SECONDS)
             .withReadTimeout(60, TimeUnit.SECONDS)
@@ -87,8 +101,8 @@ class SmbConnectionManager @Inject constructor() {
             .withSoTimeout(30, TimeUnit.SECONDS)
             .build()
 
-        client = SMBClient(smbConfig)
-        connection = client!!.connect(config.hostname, config.port)
+        entry.client = SMBClient(smbConfig)
+        entry.connection = entry.client!!.connect(config.hostname, config.port)
 
         val authContext = if (config.username.isNotBlank()) {
             AuthenticationContext(
@@ -100,9 +114,9 @@ class SmbConnectionManager @Inject constructor() {
             AuthenticationContext.guest()
         }
 
-        session = connection!!.authenticate(authContext)
-        share = session!!.connectShare(config.shareName) as DiskShare
-        currentConfig = config
+        entry.session = entry.connection!!.authenticate(authContext)
+        entry.share = entry.session!!.connectShare(config.shareName) as DiskShare
+        entry.currentConfig = config
     }
 
     suspend fun validateHostTarget(host: String): HostValidationResult = withContext(Dispatchers.IO) {
@@ -188,8 +202,20 @@ class SmbConnectionManager @Inject constructor() {
     }
 
     fun isConnected(): Boolean {
+        return entries.values.any { isConnected(it) }
+    }
+
+    fun isConnected(config: SmbConfig): Boolean {
+        val entry = entries[config.connectionKey()] ?: return false
+        return isConnected(entry)
+    }
+
+    private fun isConnected(entry: ConnectionEntry): Boolean {
         return try {
-            connection?.isConnected == true && session != null && share != null && isShareHealthy()
+            entry.connection?.isConnected == true &&
+                entry.session != null &&
+                entry.share != null &&
+                isShareHealthy(entry.share)
         } catch (e: Exception) {
             false
         }
@@ -198,7 +224,7 @@ class SmbConnectionManager @Inject constructor() {
     /**
      * shareが実際に利用可能かを軽量に確認する。
      */
-    private fun isShareHealthy(): Boolean {
+    private fun isShareHealthy(share: DiskShare?): Boolean {
         return try {
             share?.isConnected == true
         } catch (e: Exception) {
@@ -211,32 +237,59 @@ class SmbConnectionManager @Inject constructor() {
      * リトライ前に呼び出すことで、壊れたコネクションを回復させる。
      */
     suspend fun resetIfBroken(config: SmbConfig) {
-        if (!isConnected()) {
+        val entry = getOrCreateEntry(config.connectionKey())
+        if (!isConnected(entry)) {
             Log.w(TAG, "resetIfBroken: 接続が壊れているため再接続します")
-            mutex.withLock {
+            entry.mutex.withLock {
                 withContext(Dispatchers.IO) {
-                    disconnect()
-                    connect(config)
+                    disconnectEntry(entry)
+                    connect(entry, config)
                 }
             }
         }
     }
 
-    suspend fun disconnect() = withContext(Dispatchers.IO) {
+    suspend fun disconnect(configId: String) {
+        val entry = entriesMutex.withLock {
+            entries.remove(configId)
+        } ?: return
+        withContext(Dispatchers.IO) {
+            disconnectEntry(entry)
+        }
+    }
+
+    suspend fun disconnectAll() {
+        val snapshot = entriesMutex.withLock {
+            entries.toMap().also { entries.clear() }
+        }
+        withContext(Dispatchers.IO) {
+            snapshot.values.forEach { entry ->
+                disconnectEntry(entry)
+            }
+        }
+    }
+
+    suspend fun disconnect() = disconnectAll()
+
+    private fun disconnectEntry(entry: ConnectionEntry) {
         try {
-            share?.close()
-            session?.close()
-            connection?.close()
-            client?.close()
+            entry.share?.close()
+            entry.session?.close()
+            entry.connection?.close()
+            entry.client?.close()
         } catch (e: Exception) {
             // Ignore disconnect errors
         } finally {
-            share = null
-            session = null
-            connection = null
-            client = null
-            currentConfig = null
+            entry.share = null
+            entry.session = null
+            entry.connection = null
+            entry.client = null
+            entry.currentConfig = null
         }
+    }
+
+    private fun SmbConfig.connectionKey(): String {
+        return id.ifBlank { "$hostname:$port/$shareName" }
     }
 
     /**

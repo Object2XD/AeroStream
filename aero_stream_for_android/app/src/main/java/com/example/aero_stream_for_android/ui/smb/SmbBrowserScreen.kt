@@ -109,7 +109,11 @@ fun SmbBrowserScreen(
                 Icon(
                     imageVector = if (uiState.isConnected) Icons.Default.Cloud else Icons.Default.CloudOff,
                     contentDescription = "Connection status",
-                    tint = if (uiState.isConnected) SmbSourceColor else MaterialTheme.colorScheme.error
+                    tint = if (uiState.isConnected) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
                 )
             }
         }

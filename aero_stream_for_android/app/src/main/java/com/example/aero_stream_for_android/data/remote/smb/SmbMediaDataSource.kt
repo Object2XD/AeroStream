@@ -147,6 +147,7 @@ class SmbMediaDataSource @Inject constructor(
 
         val fileChannel = Channel<SmbFileInfo>(capacity = Channel.BUFFERED)
         val totalFilesFound = AtomicInteger(0)
+        val processedCount = AtomicInteger(0)
         val scannedCount = AtomicInteger(0)
         val failedCount = AtomicInteger(0)
         val skippedDirectories = AtomicInteger(0)
@@ -189,6 +190,7 @@ class SmbMediaDataSource @Inject constructor(
                                     onProgress(
                                         ScanProgressEvent(
                                             stage = SmbScanStage.ANALYZING,
+                                            processedCount = processedCount.get(),
                                             scannedCount = scannedCount.get(),
                                             failedCount = failedCount.get(),
                                             skippedDirectories = skippedDirectories.get(),
@@ -202,6 +204,7 @@ class SmbMediaDataSource @Inject constructor(
                                 onProgress(
                                     ScanProgressEvent(
                                         stage = SmbScanStage.ANALYZING,
+                                        processedCount = processedCount.get(),
                                         scannedCount = scannedCount.get(),
                                         failedCount = failedCount.get(),
                                         skippedDirectories = skippedDirectories.get(),
@@ -227,10 +230,12 @@ class SmbMediaDataSource @Inject constructor(
                                         failedCount.incrementAndGet()
                                     }
                                 }
+                                processedCount.incrementAndGet()
 
                                 onProgress(
                                     ScanProgressEvent(
                                         stage = SmbScanStage.ANALYZING,
+                                        processedCount = processedCount.get(),
                                         scannedCount = scannedCount.get(),
                                         failedCount = failedCount.get(),
                                         skippedDirectories = skippedDirectories.get(),
@@ -241,7 +246,19 @@ class SmbMediaDataSource @Inject constructor(
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
+                                processedCount.incrementAndGet()
                                 failedCount.incrementAndGet()
+                                onProgress(
+                                    ScanProgressEvent(
+                                        stage = SmbScanStage.ANALYZING,
+                                        processedCount = processedCount.get(),
+                                        scannedCount = scannedCount.get(),
+                                        failedCount = failedCount.get(),
+                                        skippedDirectories = skippedDirectories.get(),
+                                        totalCount = totalFilesFound.get(),
+                                        currentPath = fileInfo.path
+                                    )
+                                )
                                 Log.w(TAG, "Unexpected error processing ${fileInfo.path}", e)
                             }
                         }

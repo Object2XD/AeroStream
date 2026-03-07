@@ -6,6 +6,7 @@ import com.example.aero_stream_for_android.data.remote.smb.HostValidationResult
 import com.example.aero_stream_for_android.data.remote.smb.SmbConnectionTestResult
 import com.example.aero_stream_for_android.data.remote.smb.SmbConnectionManager
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
+import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
 import com.example.aero_stream_for_android.domain.model.AudioEngine
 import com.example.aero_stream_for_android.domain.model.SmbConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,7 +30,8 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val smbConnectionManager: SmbConnectionManager
+    private val smbConnectionManager: SmbConnectionManager,
+    private val smbLibraryRepository: SmbLibraryRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -104,6 +106,14 @@ class SettingsViewModel @Inject constructor(
             _uiState.update { it.copy(isTestingConnection = true, connectionTestResult = null) }
             val result = smbConnectionManager.testConnection(config)
             _uiState.update { it.copy(isTestingConnection = false, connectionTestResult = result) }
+        }
+    }
+
+    fun refreshSmbLibrary(configId: String, quickScan: Boolean = true) {
+        viewModelScope.launch {
+            val config = settingsRepository.getSmbConfigById(configId)
+            if (config == null || !config.isConfigured) return@launch
+            smbLibraryRepository.enqueueScan(config.id, quickScan)
         }
     }
 

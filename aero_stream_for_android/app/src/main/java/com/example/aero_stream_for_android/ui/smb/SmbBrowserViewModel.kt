@@ -1,6 +1,7 @@
 package com.example.aero_stream_for_android.ui.smb
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.example.aero_stream_for_android.data.download.DownloadManager
 import com.example.aero_stream_for_android.data.remote.smb.SmbConnectionManager
@@ -11,6 +12,7 @@ import com.example.aero_stream_for_android.data.remote.smb.normalizeSmbRootPath
 import com.example.aero_stream_for_android.data.repository.MusicRepository
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.SmbConfig
+import com.example.aero_stream_for_android.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -32,8 +34,12 @@ class SmbBrowserViewModel @Inject constructor(
     private val smbConnectionManager: SmbConnectionManager,
     private val settingsRepository: SettingsRepository,
     private val musicRepository: MusicRepository,
-    private val downloadManager: DownloadManager
+    private val downloadManager: DownloadManager,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+
+    private val requestedConfigId = savedStateHandle.get<String>(Screen.SmbBrowser.configIdArg)
+        ?.takeIf { it.isNotBlank() }
 
     private val _uiState = MutableStateFlow(SmbBrowserUiState())
     val uiState: StateFlow<SmbBrowserUiState> = _uiState.asStateFlow()
@@ -41,6 +47,26 @@ class SmbBrowserViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.migrateLegacySmbConfigIfNeeded()
+            if (!requestedConfigId.isNullOrBlank()) {
+                val requestedConfig = settingsRepository.getSmbConfigById(requestedConfigId)
+                val resolvedConfig = requestedConfig ?: SmbConfig()
+                val initialPath = normalizeSmbRootPath(resolvedConfig.rootPath)
+                _uiState.update {
+                    it.copy(
+                        smbConfig = resolvedConfig,
+                        currentPath = initialPath,
+                        pathHistory = listOf(initialPath),
+                        listing = null,
+                        isConnected = false,
+                        error = if (resolvedConfig.isConfigured) null else "SMBサーバーが設定されていません"
+                    )
+                }
+                if (resolvedConfig.isConfigured) {
+                    browseTo(initialPath)
+                }
+                return@launch
+            }
+
             settingsRepository.selectedSmbConfig.collect { config ->
                 val resolvedConfig = config ?: SmbConfig()
                 val initialPath = normalizeSmbRootPath(resolvedConfig.rootPath)

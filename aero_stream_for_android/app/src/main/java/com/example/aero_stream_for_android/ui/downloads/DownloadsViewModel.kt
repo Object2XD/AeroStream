@@ -7,7 +7,6 @@ import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
 import com.example.aero_stream_for_android.data.repository.DownloadRepository
 import com.example.aero_stream_for_android.data.repository.MusicRepository
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
-import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -37,7 +36,7 @@ class DownloadsViewModel @Inject constructor(
     private fun loadDownloads() {
         // ダウンロード済み楽曲の監視
         viewModelScope.launch {
-            musicRepository.getSongsBySource(MusicSource.DOWNLOAD).collect { songs ->
+            musicRepository.getCachedSmbSongs().collect { songs ->
                 _uiState.update { it.copy(downloadedSongs = songs, isLoading = false) }
             }
         }
