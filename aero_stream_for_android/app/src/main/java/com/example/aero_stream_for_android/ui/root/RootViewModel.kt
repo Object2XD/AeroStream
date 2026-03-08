@@ -162,12 +162,16 @@ class RootViewModel @Inject constructor(
         }
     }
 
-    fun applyHeaderDelta(deltaY: Float) {
+    fun applyHeaderDelta(deltaY: Float): Float {
+        var consumedY = 0f
         _uiState.update { state ->
+            val result = state.quickReturnHeaderState.applyScrollDeltaWithConsumption(deltaY)
+            consumedY = result.consumedY
             state.copy(
-                quickReturnHeaderState = state.quickReturnHeaderState.applyScrollDelta(deltaY)
+                quickReturnHeaderState = result.state
             )
         }
+        return consumedY
     }
 
     fun resetHeaderOffset() {

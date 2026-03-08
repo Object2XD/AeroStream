@@ -4,6 +4,11 @@ data class QuickReturnHeaderState(
     val totalHeaderHeightPx: Int = 0,
     val headerOffsetPx: Float = 0f
 ) {
+    data class ScrollDeltaResult(
+        val state: QuickReturnHeaderState,
+        val consumedY: Float
+    )
+
     val visibleHeaderHeightPx: Float
         get() = (totalHeaderHeightPx + headerOffsetPx).coerceIn(0f, totalHeaderHeightPx.toFloat())
 
@@ -14,9 +19,23 @@ data class QuickReturnHeaderState(
     }
 
     fun applyScrollDelta(deltaY: Float): QuickReturnHeaderState {
-        if (totalHeaderHeightPx <= 0) return copy(headerOffsetPx = 0f)
-        return copy(
+        return applyScrollDeltaWithConsumption(deltaY).state
+    }
+
+    fun applyScrollDeltaWithConsumption(deltaY: Float): ScrollDeltaResult {
+        if (totalHeaderHeightPx <= 0) {
+            return ScrollDeltaResult(
+                state = copy(headerOffsetPx = 0f),
+                consumedY = 0f
+            )
+        }
+
+        val updatedState = copy(
             headerOffsetPx = (headerOffsetPx + deltaY).coerceIn(-totalHeaderHeightPx.toFloat(), 0f)
+        )
+        return ScrollDeltaResult(
+            state = updatedState,
+            consumedY = updatedState.headerOffsetPx - headerOffsetPx
         )
     }
 

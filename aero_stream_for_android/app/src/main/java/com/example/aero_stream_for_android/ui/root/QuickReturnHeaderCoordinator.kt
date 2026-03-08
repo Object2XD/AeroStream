@@ -12,15 +12,14 @@ import androidx.compose.ui.unit.Velocity
 @Composable
 fun rememberQuickReturnNestedScrollConnection(
     enabled: Boolean,
-    onDelta: (Float) -> Unit
+    onScrollDelta: (Float) -> Float
 ): NestedScrollConnection {
-    return remember(enabled, onDelta) {
+    return remember(enabled, onScrollDelta) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (enabled) {
-                    onDelta(available.y)
-                }
-                return Offset.Zero
+                if (!enabled || available.y == 0f) return Offset.Zero
+                val consumedY = onScrollDelta(available.y)
+                return Offset(x = 0f, y = consumedY)
             }
 
             override fun onPostScroll(
@@ -28,10 +27,9 @@ fun rememberQuickReturnNestedScrollConnection(
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                if (enabled && available.y != 0f) {
-                    onDelta(available.y)
-                }
-                return Offset.Zero
+                if (!enabled || available.y == 0f) return Offset.Zero
+                val consumedY = onScrollDelta(available.y)
+                return Offset(x = 0f, y = consumedY)
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity = Velocity.Zero

@@ -56,6 +56,29 @@ class QuickReturnHeaderStateTest {
     }
 
     @Test
+    fun applyScrollDeltaWithConsumption_returnsActualConsumedDelta() {
+        val state = QuickReturnHeaderState(totalHeaderHeightPx = 100, headerOffsetPx = -80f)
+
+        val collapseResult = state.applyScrollDeltaWithConsumption(-50f)
+        val expandResult = collapseResult.state.applyScrollDeltaWithConsumption(30f)
+
+        assertEquals(-100f, collapseResult.state.headerOffsetPx, 0f)
+        assertEquals(-20f, collapseResult.consumedY, 0f)
+        assertEquals(-70f, expandResult.state.headerOffsetPx, 0f)
+        assertEquals(30f, expandResult.consumedY, 0f)
+    }
+
+    @Test
+    fun applyScrollDeltaWithConsumption_withoutHeaderHeight_consumesNothing() {
+        val state = QuickReturnHeaderState(totalHeaderHeightPx = 0, headerOffsetPx = -10f)
+
+        val result = state.applyScrollDeltaWithConsumption(-25f)
+
+        assertEquals(0f, result.state.headerOffsetPx, 0f)
+        assertEquals(0f, result.consumedY, 0f)
+    }
+
+    @Test
     fun resetOffset_alwaysReturnsZeroOffset() {
         val state = QuickReturnHeaderState(totalHeaderHeightPx = 100, headerOffsetPx = -60f)
 
