@@ -37,13 +37,13 @@ import com.example.aero_stream_for_android.domain.model.cacheStatus
 import com.example.aero_stream_for_android.ui.downloads.DownloadsViewModel
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import kotlinx.coroutines.launch
 
 @Composable
 fun CacheLibraryContent(
     featureState: LibraryFeatureState,
-    onNavigateToPlayer: () -> Unit = {},
     downloadsViewModel: DownloadsViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -54,6 +54,7 @@ fun CacheLibraryContent(
     val coroutineScope = rememberCoroutineScope()
     val activeDownloads = uiState.activeDownloads
     val downloadedSongs = uiState.downloadedSongs
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
 
     if (uiState.isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -66,7 +67,7 @@ fun CacheLibraryContent(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 96.dp)
+            contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 24.dp)
         ) {
             if (activeDownloads.isNotEmpty()) {
                 item {
@@ -136,7 +137,6 @@ fun CacheLibraryContent(
                         song = song,
                         onClick = {
                             playerViewModel.playQueue(downloadedSongs, downloadedSongs.indexOf(song))
-                            onNavigateToPlayer()
                         },
                         menuItems = if (song.cacheStatus == SongCacheStatus.CACHED) {
                             listOf(

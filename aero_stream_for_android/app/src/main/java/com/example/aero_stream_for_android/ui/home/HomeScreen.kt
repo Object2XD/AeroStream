@@ -29,17 +29,18 @@ import com.example.aero_stream_for_android.ui.library.content.LibraryRowMenuItem
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRow
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRowStyle
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 
 @Composable
 fun HomeScreen(
-    onNavigateToPlayer: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     homeViewModel: HomeViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
 
     if (uiState.isLoading) {
         Box(
@@ -53,7 +54,7 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 96.dp)
+        contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 24.dp)
     ) {
         if (uiState.recentlyPlayed.isNotEmpty()) {
             item {
@@ -64,7 +65,6 @@ fun HomeScreen(
                     song = song,
                     onClick = {
                         playerViewModel.playSong(song)
-                        onNavigateToPlayer()
                     },
                     menuItems = if (song.source == MusicSource.SMB) {
                         when (song.cacheStatus) {
@@ -108,7 +108,6 @@ fun HomeScreen(
                     song = song,
                     onClick = {
                         playerViewModel.playSong(song)
-                        onNavigateToPlayer()
                     },
                     menuItems = if (song.source == MusicSource.SMB) {
                         when (song.cacheStatus) {

@@ -71,11 +71,6 @@ sealed class Screen(
         title = "設定"
     )
 
-    data object Player : Screen(
-        route = "player",
-        title = "プレイヤー"
-    )
-
     data object AlbumDetail : Screen(
         route = "album_detail",
         title = "アルバム詳細"

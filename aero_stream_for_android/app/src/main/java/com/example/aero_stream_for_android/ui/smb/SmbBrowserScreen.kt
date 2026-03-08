@@ -19,17 +19,18 @@ import com.example.aero_stream_for_android.ui.components.AeroListRow
 import com.example.aero_stream_for_android.ui.components.AeroPrimaryActionButton
 import com.example.aero_stream_for_android.ui.components.AeroTopBar
 import com.example.aero_stream_for_android.ui.components.AeroTopBarSearch
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmbBrowserScreen(
-    onNavigateToPlayer: () -> Unit = {},
     viewModel: SmbBrowserViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var isSearchMode by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
 
     val filteredDirectories = uiState.listing?.directories?.filter { dir ->
         dir.name.contains(searchQuery, ignoreCase = true) ||
@@ -152,7 +153,7 @@ fun SmbBrowserScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 8.dp)
                 ) {
                     // ディレクトリ
                     if (listing != null) {

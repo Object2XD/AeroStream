@@ -48,18 +48,19 @@ import com.example.aero_stream_for_android.ui.library.content.LibraryRowMenuItem
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRow
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRowStyle
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     onNavigateBack: () -> Unit = {},
-    onNavigateToPlayer: () -> Unit = {},
     searchViewModel: SearchViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by searchViewModel.uiState.collectAsState()
     val playerState by playerViewModel.playerState.collectAsState()
     val focusRequester = remember { FocusRequester() }
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -106,7 +107,7 @@ fun SearchScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 8.dp)
                 ) {
                     item {
                         Row(
@@ -190,14 +191,13 @@ fun SearchScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 8.dp)
                 ) {
                     items(uiState.results) { song ->
                         LibrarySongRow(
                             song = song,
                             onClick = {
                                 playerViewModel.playQueue(uiState.results, uiState.results.indexOf(song))
-                                onNavigateToPlayer()
                             },
                             menuItems = if (song.source == MusicSource.SMB) {
                                 when (song.cacheStatus) {

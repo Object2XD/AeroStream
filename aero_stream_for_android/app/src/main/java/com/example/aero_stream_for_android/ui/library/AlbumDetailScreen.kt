@@ -29,6 +29,7 @@ import com.example.aero_stream_for_android.domain.model.isSmbSource
 import com.example.aero_stream_for_android.ui.library.content.LibraryFastScroller
 import com.example.aero_stream_for_android.ui.library.content.rememberLibraryScrollController
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -36,7 +37,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun AlbumDetailScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToPlayer: () -> Unit,
     topInset: androidx.compose.ui.unit.Dp = 0.dp,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
@@ -48,6 +48,7 @@ fun AlbumDetailScreen(
     val scrollController = rememberLibraryScrollController(listState)
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
     val collapseThresholdPx = with(density) { 240.dp.toPx() }
     val collapsedProgress by remember(listState, collapseThresholdPx) {
         derivedStateOf {
@@ -65,7 +66,6 @@ fun AlbumDetailScreen(
     fun playAlbum(startIndex: Int = 0) {
         if (uiState.songs.isEmpty()) return
         playerViewModel.playQueue(uiState.songs, startIndex)
-        onNavigateToPlayer()
     }
 
     LaunchedEffect(viewModel) {
@@ -81,7 +81,9 @@ fun AlbumDetailScreen(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(bottom = AeroCompactUiTokens.albumDetailListBottomPadding),
+            contentPadding = PaddingValues(
+                bottom = AeroCompactUiTokens.albumDetailListBottomPadding + playerSheetBottomClearance
+            ),
             modifier = Modifier.fillMaxSize()
         ) {
             item {

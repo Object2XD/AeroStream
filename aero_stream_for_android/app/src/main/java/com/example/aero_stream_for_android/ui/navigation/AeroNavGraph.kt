@@ -23,7 +23,6 @@ fun AeroNavGraph(
     navController: NavHostController,
     modifier: Modifier = Modifier,
     libraryFeatureState: LibraryFeatureState,
-    onNavigateToPlayer: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onNavigateBackFromSearch: () -> Unit = {},
     smbScanSheetRequestToken: Int = 0,
@@ -40,7 +39,6 @@ fun AeroNavGraph(
     ) {
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateToPlayer = onNavigateToPlayer,
                 onNavigateToSettings = onNavigateToSettings
             )
         }
@@ -48,7 +46,6 @@ fun AeroNavGraph(
         composable(Screen.Library.route) {
             LibraryRouteScreen(
                 featureState = libraryFeatureState,
-                onNavigateToPlayer = onNavigateToPlayer,
                 smbScanSheetRequestToken = smbScanSheetRequestToken,
                 smbScanCancelRequestToken = smbScanCancelRequestToken,
                 onNavigateToAlbumDetail = { album, source, smbConfigId ->
@@ -76,8 +73,7 @@ fun AeroNavGraph(
 
         composable(Screen.Search.route) {
             SearchScreen(
-                onNavigateBack = onNavigateBackFromSearch,
-                onNavigateToPlayer = onNavigateToPlayer
+                onNavigateBack = onNavigateBackFromSearch
             )
         }
 
@@ -90,9 +86,7 @@ fun AeroNavGraph(
                 }
             )
         ) {
-            SmbBrowserScreen(
-                onNavigateToPlayer = onNavigateToPlayer
-            )
+            SmbBrowserScreen()
         }
 
         composable(
@@ -112,8 +106,7 @@ fun AeroNavGraph(
             )
         ) {
             AlbumDetailScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToPlayer = onNavigateToPlayer
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
@@ -129,8 +122,7 @@ fun AeroNavGraph(
             )
         ) {
             ArtistDetailScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToPlayer = onNavigateToPlayer
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

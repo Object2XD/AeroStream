@@ -46,6 +46,7 @@ import com.example.aero_stream_for_android.ui.components.AeroSheetScaffold
 import com.example.aero_stream_for_android.ui.components.AeroSheetSectionTitle
 import com.example.aero_stream_for_android.ui.components.AeroSingleChoiceOptionRow
 import com.example.aero_stream_for_android.ui.components.AeroTopBar
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import java.util.UUID
 
@@ -69,6 +70,7 @@ fun SettingsScreen(
     var deleteTarget by remember { mutableStateOf<SmbConfig?>(null) }
     var refreshTargetConfigId by remember { mutableStateOf<String?>(null) }
     var showClearLoadedMusicConfirm by remember { mutableStateOf(false) }
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -85,7 +87,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(bottom = 80.dp)
+            contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 8.dp)
         ) {
             item {
                 SettingsSectionHeader("オーディオエンジン")

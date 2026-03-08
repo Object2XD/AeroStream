@@ -7,14 +7,11 @@ import com.example.aero_stream_for_android.ui.library.LibrarySource
 import com.example.aero_stream_for_android.ui.library.content.CacheLibraryContent
 
 @Composable
-fun DownloadsScreen(
-    onNavigateToPlayer: () -> Unit = {}
-) {
+fun DownloadsScreen() {
     CacheLibraryContent(
         featureState = LibraryFeatureState(
             source = LibrarySource.Cache,
             category = LibraryCategory.Songs
-        ),
-        onNavigateToPlayer = onNavigateToPlayer
+        )
     )
 }

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.ui.components.SongListItem
@@ -33,14 +32,6 @@ class LibraryRowLineAlignmentTest {
             smbPath = "seed/demo/track_1.mp3",
             isCached = false
         )
-        val album = Album(
-            id = 10L,
-            name = "Album Row Title",
-            artist = "Album Artist",
-            songCount = 3,
-            isFullyCached = false
-        )
-
         composeRule.setContent {
             AeroStreamTheme {
                 Column {
@@ -49,8 +40,10 @@ class LibraryRowLineAlignmentTest {
                         onClick = {},
                         style = SongListItemStyle.WithStatusBadge
                     )
-                    AlbumRow(
-                        album = album,
+                    LibraryAlbumRow(
+                        albumName = "Album Row Title",
+                        subtitle = "アルバム・Album Artist",
+                        albumArtUri = null,
                         onClick = {},
                         showStatusBadge = true
                     )
@@ -76,14 +69,6 @@ class LibraryRowLineAlignmentTest {
             duration = 181_000L,
             source = MusicSource.LOCAL
         )
-        val album = Album(
-            id = 20L,
-            name = "Album Local Title",
-            artist = "Local Artist",
-            songCount = 5,
-            isFullyCached = true
-        )
-
         composeRule.setContent {
             AeroStreamTheme {
                 Column {
@@ -92,10 +77,13 @@ class LibraryRowLineAlignmentTest {
                         onClick = {},
                         style = SongListItemStyle.CompactNoBadge
                     )
-                    AlbumRow(
-                        album = album,
+                    LibraryAlbumRow(
+                        albumName = "Album Local Title",
+                        subtitle = "アルバム・Local Artist",
+                        albumArtUri = null,
                         onClick = {},
-                        showStatusBadge = false
+                        showStatusBadge = false,
+                        isFullyCached = true
                     )
                 }
             }

@@ -10,7 +10,6 @@ import com.example.aero_stream_for_android.ui.library.content.SmbLibraryContent
 @Composable
 fun LibraryRouteScreen(
     featureState: LibraryFeatureState,
-    onNavigateToPlayer: () -> Unit = {},
     smbScanSheetRequestToken: Int = 0,
     smbScanCancelRequestToken: Int = 0,
     onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> },
@@ -20,7 +19,6 @@ fun LibraryRouteScreen(
         LibrarySource.LocalFiles -> {
             LocalLibraryContent(
                 featureState = featureState,
-                onNavigateToPlayer = onNavigateToPlayer,
                 onNavigateToAlbumDetail = onNavigateToAlbumDetail,
                 onNavigateToArtistDetail = onNavigateToArtistDetail
             )
@@ -29,7 +27,6 @@ fun LibraryRouteScreen(
         LibrarySource.SMB -> {
             SmbLibraryContent(
                 featureState = featureState,
-                onNavigateToPlayer = onNavigateToPlayer,
                 openScanOptionsRequestToken = smbScanSheetRequestToken,
                 cancelScanRequestToken = smbScanCancelRequestToken,
                 onNavigateToAlbumDetail = onNavigateToAlbumDetail,
@@ -38,10 +35,7 @@ fun LibraryRouteScreen(
         }
 
         LibrarySource.Cache -> {
-            CacheLibraryContent(
-                featureState = featureState,
-                onNavigateToPlayer = onNavigateToPlayer
-            )
+            CacheLibraryContent(featureState = featureState)
         }
     }
 }

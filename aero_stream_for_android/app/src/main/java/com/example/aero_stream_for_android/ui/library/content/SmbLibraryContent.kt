@@ -42,13 +42,13 @@ import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.library.LibrarySortKey
 import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.smb.SmbLibraryViewModel
 import kotlinx.coroutines.launch
 
 @Composable
 fun SmbLibraryContent(
     featureState: LibraryFeatureState,
-    onNavigateToPlayer: () -> Unit = {},
     onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> },
     onNavigateToArtistDetail: (String, MusicSource?, String?) -> Unit = { _, _, _ -> },
     openScanOptionsRequestToken: Int = 0,
@@ -61,6 +61,7 @@ fun SmbLibraryContent(
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
     val coroutineScope = rememberCoroutineScope()
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
     val isNameSort = featureState.sort.key == LibrarySortKey.Name
     val bubbleLabel = if (isNameSort) {
         val targetIndex = scrollController.progressToTarget(scrollController.progress.value).index
@@ -127,7 +128,7 @@ fun SmbLibraryContent(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 96.dp)
+            contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 24.dp)
         ) {
             when {
                 uiState.selectedSmbConfig == null -> {
@@ -164,7 +165,6 @@ fun SmbLibraryContent(
                                         song = song,
                                         onClick = {
                                             playerViewModel.playQueue(songs, songs.indexOf(song))
-                                            onNavigateToPlayer()
                                         },
                                         menuItems = when (song.cacheStatus) {
                                             SongCacheStatus.SMB_NOT_CACHED -> listOf(

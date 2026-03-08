@@ -51,17 +51,13 @@ class AlbumCacheBadgeTest {
     fun localAlbumRow_hidesBadge_whenShowStatusBadgeIsFalse() {
         composeRule.setContent {
             AeroStreamTheme {
-                AlbumRow(
-                    album = Album(
-                        id = 1L,
-                        name = "Local Album",
-                        artist = "Local Artist",
-                        songCount = 10,
-                        cachedSongCount = 10,
-                        isFullyCached = true
-                    ),
+                LibraryAlbumRow(
+                    albumName = "Local Album",
+                    subtitle = "アルバム・Local Artist",
+                    albumArtUri = null,
                     onClick = {},
-                    showStatusBadge = false
+                    showStatusBadge = false,
+                    isFullyCached = true
                 )
             }
         }

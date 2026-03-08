@@ -1,11 +1,11 @@
 package com.example.aero_stream_for_android.ui.root
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,16 +14,18 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -38,8 +40,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.aero_stream_for_android.ui.components.FullScreenPlayer
-import com.example.aero_stream_for_android.ui.components.MiniPlayer
+import com.example.aero_stream_for_android.ui.components.ExpandablePlayerSheet
+import com.example.aero_stream_for_android.ui.components.ExpandablePlayerSheetValue
+import com.example.aero_stream_for_android.ui.components.collapsePlayerSheet
+import com.example.aero_stream_for_android.ui.components.reconcilePlayerSheetValue
 import com.example.aero_stream_for_android.ui.navigation.AeroNavGraph
 import com.example.aero_stream_for_android.ui.navigation.Screen
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
@@ -56,7 +60,7 @@ fun RootShell(
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    var showFullPlayer by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    var playerSheetValue by rememberSaveable { mutableStateOf(ExpandablePlayerSheetValue.Hidden) }
     var smbScanSheetRequestToken by rememberSaveable { mutableIntStateOf(0) }
     var smbScanCancelRequestToken by rememberSaveable { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -72,6 +76,13 @@ fun RootShell(
 
     LaunchedEffect(currentRoute) {
         rootViewModel.onRouteChanged(currentRoute)
+    }
+
+    LaunchedEffect(playerState.currentSong?.id) {
+        playerSheetValue = reconcilePlayerSheetValue(
+            currentValue = playerSheetValue,
+            hasCurrentSong = playerState.currentSong != null
+        )
     }
 
     fun navigateToTopLevel(route: String) {
@@ -93,138 +104,148 @@ fun RootShell(
         }
     }
 
-    if (showFullPlayer && playerState.currentSong != null) {
-        FullScreenPlayer(
-            playerState = playerState,
-            onPlayPause = playerViewModel::togglePlayPause,
-            onSkipNext = playerViewModel::skipToNext,
-            onSkipPrevious = playerViewModel::skipToPrevious,
-            onSeek = playerViewModel::seekTo,
-            onRepeatModeChange = playerViewModel::toggleRepeatMode,
-            onShuffleToggle = playerViewModel::toggleShuffle,
-            onDownload = playerViewModel::downloadCurrentSong,
-            onCollapse = { showFullPlayer = false }
-        )
-        return
+    BackHandler(enabled = playerSheetValue == ExpandablePlayerSheetValue.Expanded) {
+        playerSheetValue = collapsePlayerSheet(playerSheetValue)
     }
 
     InsetsHost {
+        val playerBottomClearance = if (playerState.currentSong != null) {
+            AeroCompactUiTokens.playerSheetPeekHeight + AeroCompactUiTokens.playerSheetContentBottomSpacing
+        } else {
+            0.dp
+        }
+        val bottomNavHeight = if (rootState.bottomNavSpec.visible) {
+            AeroCompactUiTokens.bottomNavHeight
+        } else {
+            0.dp
+        }
         val appRoute = routeToAppRoute(currentRoute)
         val edgeBackdropSpec = resolveEdgeBackdropSpec(
             appRoute = appRoute,
             colorScheme = MaterialTheme.colorScheme
         )
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(edgeBackdropSpec.baseTone)
-            )
-            EdgeBackdropLayer(
-                spec = edgeBackdropSpec,
-                modifier = Modifier.fillMaxSize()
-            )
-
-        RootScaffold(
-            modifier = Modifier.quickReturnNestedScroll(
-                enabled = rootState.headerSpec.enabled && rootState.activeOverlay == NoOverlay,
-                connection = nestedScrollConnection
-            ),
-            bottomBar = {
-                Column {
-                    AnimatedVisibility(
-                        visible = playerState.currentSong != null,
-                        enter = slideInVertically(initialOffsetY = { it }),
-                        exit = slideOutVertically(targetOffsetY = { it })
-                    ) {
-                        MiniPlayer(
-                            playerState = playerState,
-                            onPlayPause = playerViewModel::togglePlayPause,
-                            onSkipNext = playerViewModel::skipToNext,
-                            onClick = { showFullPlayer = true }
-                        )
-                    }
-                    if (rootState.bottomNavSpec.visible) {
-                        NavigationBar(
-                            modifier = Modifier.height(AeroCompactUiTokens.bottomNavHeight),
-                            containerColor = edgeBackdropSpec.bottomTone,
-                            windowInsets = WindowInsets(0, 0, 0, 0)
-                        ) {
-                            bottomNavItems.forEach { screen ->
-                                val isSelected = when (screen.route) {
-                                    Screen.Home.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Top
-                                    Screen.Library.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
-                                    else -> false
-                                }
-                                NavigationBarItem(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (screen.route == Screen.Library.route &&
-                                            rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
-                                        ) {
-                                            rootViewModel.openOverlay(LibrarySourcePickerOverlay)
-                                        } else {
-                                            navigateToTopLevel(screen.route)
-                                            rootViewModel.closeOverlay()
-                                            rootViewModel.resetHeaderOffset()
-                                        }
-                                    },
-                                    icon = {
-                                        val icon = if (isSelected) screen.selectedIcon else screen.unselectedIcon
-                                        if (icon != null) {
-                                            Icon(icon, contentDescription = screen.title)
-                                        }
-                                    },
-                                    label = {
-                                        Text(
-                                            text = screen.title,
-                                            style = AeroCompactUiTokens.bottomNavLabelTextStyle()
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                val visibleHeaderHeightDp = with(density) {
-                    rootState.quickReturnHeaderState.visibleHeaderHeightPx.toDp()
-                }
-
+        CompositionLocalProvider(LocalPlayerSheetBottomClearance provides playerBottomClearance) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = visibleHeaderHeightDp)
-                ) {
-                    AeroNavGraph(
-                        navController = navController,
-                        modifier = Modifier.fillMaxSize(),
-                        libraryFeatureState = rootState.libraryFeatureState,
-                        onNavigateToPlayer = { showFullPlayer = true },
-                        onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                        onNavigateBackFromSearch = { navController.popBackStack() },
-                        smbScanSheetRequestToken = smbScanSheetRequestToken,
-                        smbScanCancelRequestToken = smbScanCancelRequestToken
-                    )
+                        .background(edgeBackdropSpec.baseTone)
+                )
+                EdgeBackdropLayer(
+                    spec = edgeBackdropSpec,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                RootScaffold(
+                    modifier = Modifier.quickReturnNestedScroll(
+                        enabled = rootState.headerSpec.enabled && rootState.activeOverlay == NoOverlay,
+                        connection = nestedScrollConnection
+                    ),
+                    bottomBar = {
+                        if (rootState.bottomNavSpec.visible) {
+                            NavigationBar(
+                                modifier = Modifier.height(AeroCompactUiTokens.bottomNavHeight),
+                                containerColor = edgeBackdropSpec.bottomTone,
+                                windowInsets = WindowInsets(0, 0, 0, 0)
+                            ) {
+                                bottomNavItems.forEach { screen ->
+                                    val isSelected = when (screen.route) {
+                                        Screen.Home.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Top
+                                        Screen.Library.route -> rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
+                                        else -> false
+                                    }
+                                    NavigationBarItem(
+                                        selected = isSelected,
+                                        onClick = {
+                                            if (screen.route == Screen.Library.route &&
+                                                rootState.bottomNavSpec.selected == RootPrimaryRoute.Library
+                                            ) {
+                                                rootViewModel.openOverlay(LibrarySourcePickerOverlay)
+                                            } else {
+                                                navigateToTopLevel(screen.route)
+                                                rootViewModel.closeOverlay()
+                                                rootViewModel.resetHeaderOffset()
+                                            }
+                                        },
+                                        icon = {
+                                            val icon =
+                                                if (isSelected) screen.selectedIcon else screen.unselectedIcon
+                                            if (icon != null) {
+                                                Icon(icon, contentDescription = screen.title)
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = screen.title,
+                                                style = AeroCompactUiTokens.bottomNavLabelTextStyle()
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    ) {
+                        val visibleHeaderHeightDp = with(density) {
+                            rootState.quickReturnHeaderState.visibleHeaderHeightPx.toDp()
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = visibleHeaderHeightDp)
+                        ) {
+                            AeroNavGraph(
+                                navController = navController,
+                                modifier = Modifier.fillMaxSize(),
+                                libraryFeatureState = rootState.libraryFeatureState,
+                                onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                                onNavigateBackFromSearch = { navController.popBackStack() },
+                                smbScanSheetRequestToken = smbScanSheetRequestToken,
+                                smbScanCancelRequestToken = smbScanCancelRequestToken
+                            )
+                        }
+
+                        if (rootState.headerSpec.enabled) {
+                            QuickReturnHeaderContainer(
+                                spec = rootState.headerSpec,
+                                onHeaderHeightChanged = rootViewModel::updateHeaderHeight,
+                                onActionClick = ::handleHeaderAction,
+                                onCategorySelected = rootViewModel::setLibraryCategory,
+                                onOpenSortPicker = { rootViewModel.openOverlay(LibrarySortPickerOverlay) },
+                                modifier = Modifier.offset {
+                                    IntOffset(
+                                        0,
+                                        rootState.quickReturnHeaderState.headerOffsetPx.roundToInt()
+                                    )
+                                }
+                            )
+                        }
+                    }
                 }
 
-                if (rootState.headerSpec.enabled) {
-                    QuickReturnHeaderContainer(
-                        spec = rootState.headerSpec,
-                        onHeaderHeightChanged = rootViewModel::updateHeaderHeight,
-                        onActionClick = ::handleHeaderAction,
-                        onCategorySelected = rootViewModel::setLibraryCategory,
-                        onOpenSortPicker = { rootViewModel.openOverlay(LibrarySortPickerOverlay) },
-                        modifier = Modifier.offset {
-                            IntOffset(0, rootState.quickReturnHeaderState.headerOffsetPx.roundToInt())
-                        }
+                AnimatedVisibility(
+                    visible = playerState.currentSong != null,
+                    enter = slideInVertically(initialOffsetY = { it }),
+                    exit = slideOutVertically(targetOffsetY = { it })
+                ) {
+                    ExpandablePlayerSheet(
+                        playerState = playerState,
+                        sheetValue = playerSheetValue,
+                        onSheetValueChange = { playerSheetValue = it },
+                        onPlayPause = playerViewModel::togglePlayPause,
+                        onSkipNext = playerViewModel::skipToNext,
+                        onSkipPrevious = playerViewModel::skipToPrevious,
+                        onSeek = playerViewModel::seekTo,
+                        onRepeatModeChange = playerViewModel::toggleRepeatMode,
+                        onShuffleToggle = playerViewModel::toggleShuffle,
+                        bottomBarHeight = bottomNavHeight
                     )
                 }
 
@@ -238,7 +259,6 @@ fun RootShell(
                     onConfirmSort = rootViewModel::setLibrarySort
                 )
             }
-        }
         }
     }
 }

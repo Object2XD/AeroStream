@@ -50,6 +50,7 @@ import com.example.aero_stream_for_android.domain.model.SongCacheStatus
 import com.example.aero_stream_for_android.domain.model.cacheStatus
 import com.example.aero_stream_for_android.ui.components.AeroIconActionButton
 import com.example.aero_stream_for_android.ui.components.AeroIconActionStyle
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 
 @Composable
@@ -438,6 +439,8 @@ internal fun AlbumBottomPlayShortcut(
 ) {
     if (!visible) return
 
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -445,7 +448,8 @@ internal fun AlbumBottomPlayShortcut(
                 start = AeroCompactUiTokens.albumDetailHorizontalPadding,
                 end = AeroCompactUiTokens.albumDetailHorizontalPadding,
                 top = AeroCompactUiTokens.albumDetailBottomPlayTopPadding,
-                bottom = AeroCompactUiTokens.albumDetailBottomPlayBottomClearance
+                bottom = AeroCompactUiTokens.albumDetailBottomPlayBottomClearance +
+                    playerSheetBottomClearance
             ),
         horizontalArrangement = Arrangement.End
     ) {

@@ -7,7 +7,6 @@ import com.example.aero_stream_for_android.ui.library.content.LocalLibraryConten
 
 @Composable
 fun LibraryScreen(
-    onNavigateToPlayer: () -> Unit = {},
     onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> }
 ) {
     LocalLibraryContent(
@@ -15,7 +14,6 @@ fun LibraryScreen(
             source = LibrarySource.LocalFiles,
             category = LibraryCategory.Songs
         ),
-        onNavigateToPlayer = onNavigateToPlayer,
         onNavigateToAlbumDetail = onNavigateToAlbumDetail
     )
 }

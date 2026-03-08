@@ -26,12 +26,12 @@ import com.example.aero_stream_for_android.ui.library.content.LibrarySongRow
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRowStyle
 import com.example.aero_stream_for_android.ui.library.content.rememberLibraryScrollController
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import kotlinx.coroutines.launch
 
 @Composable
 fun ArtistDetailScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToPlayer: () -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -40,6 +40,7 @@ fun ArtistDetailScreen(
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
     val coroutineScope = rememberCoroutineScope()
+    val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -99,7 +100,7 @@ fun ArtistDetailScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             top = paddingValues.calculateTopPadding(),
-                            bottom = 96.dp
+                            bottom = playerSheetBottomClearance + 24.dp
                         )
                     ) {
                         itemsIndexed(uiState.songs) { index, song ->
@@ -107,7 +108,6 @@ fun ArtistDetailScreen(
                                 song = song,
                                 onClick = {
                                     playerViewModel.playQueue(uiState.songs, index)
-                                    onNavigateToPlayer()
                                 },
                                 isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
                                 style = if (uiState.source == MusicSource.LOCAL) {
