@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.MediaStore
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.SongMetadataState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,11 +29,8 @@ class LocalMediaDataSource @Inject constructor(
         )
     }
 
-    /**
-     * ローカルストレージの全楽曲をスキャンして返す。
-     */
-    suspend fun scanLocalMusic(): List<Song> = withContext(Dispatchers.IO) {
-        val songs = mutableListOf<Song>()
+    suspend fun queryAudioItems(): List<LocalMediaItem> = withContext(Dispatchers.IO) {
+        val items = mutableListOf<LocalMediaItem>()
 
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -50,7 +48,8 @@ class LocalMediaDataSource @Inject constructor(
             MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.SIZE,
             MediaStore.Audio.Media.MIME_TYPE,
-            MediaStore.Audio.Media.DATA
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DATE_MODIFIED
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -73,6 +72,7 @@ class LocalMediaDataSource @Inject constructor(
             val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
             val mimeTypeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
             val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+            val modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
@@ -87,26 +87,63 @@ class LocalMediaDataSource @Inject constructor(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
+                val localPath = cursor.getString(dataColumn)
+                val modifiedAt = cursor.getLong(modifiedColumn) * 1000L
 
-                songs.add(
-                    Song(
-                        id = id,
+                items.add(
+                    LocalMediaItem(
+                        mediaStoreId = id,
                         title = cursor.getString(titleColumn) ?: "Unknown",
                         artist = cursor.getString(artistColumn) ?: "Unknown Artist",
                         album = cursor.getString(albumColumn) ?: "Unknown Album",
-                        duration = duration,
                         albumArtUri = albumArtUri,
-                        source = MusicSource.LOCAL,
-                        localPath = cursor.getString(dataColumn),
-                        contentUri = contentUri,
+                        duration = duration,
                         trackNumber = cursor.getInt(trackColumn),
                         fileSize = cursor.getLong(sizeColumn),
-                        mimeType = cursor.getString(mimeTypeColumn)
+                        mimeType = cursor.getString(mimeTypeColumn),
+                        localPath = localPath,
+                        contentUri = contentUri,
+                        modifiedAt = modifiedAt
                     )
                 )
             }
         }
 
-        songs
+        items
     }
+}
+
+data class LocalMediaItem(
+    val mediaStoreId: Long,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val albumArtUri: Uri?,
+    val duration: Long,
+    val trackNumber: Int,
+    val fileSize: Long,
+    val mimeType: String?,
+    val localPath: String?,
+    val contentUri: Uri,
+    val modifiedAt: Long
+) {
+    val lookupKey: String
+        get() = localPath ?: contentUri.toString()
+
+    fun toSong(): Song = Song(
+        id = mediaStoreId,
+        title = title,
+        artist = artist,
+        album = album,
+        duration = duration,
+        albumArtUri = albumArtUri,
+        source = MusicSource.LOCAL,
+        localPath = localPath,
+        contentUri = contentUri,
+        trackNumber = trackNumber,
+        fileSize = fileSize,
+        mimeType = mimeType,
+        sourceUpdatedAt = modifiedAt,
+        metadataState = SongMetadataState.COMPLETE
+    )
 }

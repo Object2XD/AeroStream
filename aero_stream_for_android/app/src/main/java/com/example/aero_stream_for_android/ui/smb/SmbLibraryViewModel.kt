@@ -9,7 +9,6 @@ import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.Artist
 import com.example.aero_stream_for_android.domain.model.SmbConfig
 import com.example.aero_stream_for_android.domain.model.Song
-import com.example.aero_stream_for_android.data.smb.SmbMetadataExtractionQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -38,8 +37,7 @@ data class SmbLibraryUiState(
 @HiltViewModel
 class SmbLibraryViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val smbLibraryRepository: SmbLibraryRepository,
-    private val smbMetadataExtractionQueue: SmbMetadataExtractionQueue
+    private val smbLibraryRepository: SmbLibraryRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SmbLibraryUiState())
@@ -93,11 +91,6 @@ class SmbLibraryViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
-    }
-
-    fun requestMetadataExtraction(song: Song) {
-        val config = _uiState.value.selectedSmbConfig ?: return
-        smbMetadataExtractionQueue.enqueueExtraction(config, song)
     }
 
     private fun bindConfig(config: SmbConfig?) {

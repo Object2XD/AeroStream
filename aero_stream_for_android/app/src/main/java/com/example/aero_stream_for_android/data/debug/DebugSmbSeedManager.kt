@@ -110,6 +110,7 @@ class DebugSmbSeedManager @Inject constructor(
             isCached = cached,
             cachedAt = if (cached) now - 3_600_000L else null,
             cacheLastPlayedAt = if (cached) now - 1_800_000L else null,
+            metadataState = "COMPLETE",
             sourceUpdatedAt = now
         )
     }

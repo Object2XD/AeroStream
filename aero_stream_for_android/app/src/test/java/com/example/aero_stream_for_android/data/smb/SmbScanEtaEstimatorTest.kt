@@ -9,7 +9,7 @@ class SmbScanEtaEstimatorTest {
     @Test
     fun estimate_returnsProgressAndEta_whenAnalyzingAndCountsAvailable() {
         val result = SmbScanEtaEstimator.estimate(
-            stage = SmbScanStage.ANALYZING,
+            stage = SmbScanStage.EXTRACTING,
             processedCount = 50,
             totalCount = 100,
             elapsedMillis = 25_000L
@@ -35,7 +35,7 @@ class SmbScanEtaEstimatorTest {
     @Test
     fun estimate_returnsNulls_whenCountsNotReady() {
         val result = SmbScanEtaEstimator.estimate(
-            stage = SmbScanStage.ANALYZING,
+            stage = SmbScanStage.STAGING,
             processedCount = 0,
             totalCount = 0,
             elapsedMillis = 25_000L
@@ -43,6 +43,19 @@ class SmbScanEtaEstimatorTest {
 
         assertNull(result.progressPercent)
         assertNull(result.estimatedRemainingSec)
+    }
+
+    @Test
+    fun estimate_returnsProgressDuringCommitting() {
+        val result = SmbScanEtaEstimator.estimate(
+            stage = SmbScanStage.COMMITTING,
+            processedCount = 80,
+            totalCount = 100,
+            elapsedMillis = 40_000L
+        )
+
+        assertEquals(80, result.progressPercent)
+        assertEquals(10L, result.estimatedRemainingSec)
     }
 
     @Test

@@ -12,7 +12,12 @@ object SmbScanEtaEstimator {
         totalCount: Int,
         elapsedMillis: Long
     ): SmbScanEta {
-        if (stage != SmbScanStage.ANALYZING || processedCount <= 0 || totalCount <= 0 || elapsedMillis <= 0L) {
+        if (
+            (stage != SmbScanStage.EXTRACTING && stage != SmbScanStage.STAGING && stage != SmbScanStage.COMMITTING) ||
+            processedCount <= 0 ||
+            totalCount <= 0 ||
+            elapsedMillis <= 0L
+        ) {
             return SmbScanEta(progressPercent = null, estimatedRemainingSec = null)
         }
         val boundedProcessed = processedCount.coerceAtMost(totalCount)

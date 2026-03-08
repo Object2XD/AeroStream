@@ -4,9 +4,10 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
-import com.example.aero_stream_for_android.data.smb.MetadataResult
+import com.example.aero_stream_for_android.data.scan.ScanMetadataResult
 import com.example.aero_stream_for_android.domain.model.SmbConfig
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.SongMetadataState
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -24,10 +25,11 @@ internal class SmbMetadataExtractor(
         fileInfo: SmbFileInfo,
         openFileStream: suspend (SmbConfig, String) -> InputStream,
         toSong: (SmbFileInfo) -> Song
-    ): MetadataResult {
+    ): ScanMetadataResult {
         val fallbackSong = toSong(fileInfo).copy(
             smbConfigId = config.id,
-            sourceUpdatedAt = System.currentTimeMillis()
+            sourceUpdatedAt = System.currentTimeMillis(),
+            metadataState = SongMetadataState.FALLBACK
         )
         val tempFile = File.createTempFile("smb_meta_", ".${fileInfo.extension}", context.cacheDir)
 
@@ -37,7 +39,7 @@ internal class SmbMetadataExtractor(
                     loggerTag,
                     "File too large for metadata extraction (${fileInfo.size} bytes), using fallback: ${fileInfo.path}"
                 )
-                return MetadataResult.Fallback(fallbackSong)
+                return ScanMetadataResult.Fallback(fallbackSong)
             }
 
             openFileStream(config, fileInfo.path).use { input ->
@@ -84,7 +86,7 @@ internal class SmbMetadataExtractor(
                     saveArtwork(config.id, fileInfo.path, bytes)
                 }
 
-                MetadataResult.Success(
+                ScanMetadataResult.Success(
                     fallbackSong.copy(
                         title = title,
                         artist = artist,
@@ -92,7 +94,8 @@ internal class SmbMetadataExtractor(
                         album = album,
                         duration = duration,
                         trackNumber = trackNumber,
-                        albumArtUri = artUri
+                        albumArtUri = artUri,
+                        metadataState = SongMetadataState.COMPLETE
                     )
                 )
             } finally {
@@ -102,7 +105,7 @@ internal class SmbMetadataExtractor(
             throw e
         } catch (e: Exception) {
             Log.w(loggerTag, "Metadata extraction failed for ${fileInfo.path}, using fallback", e)
-            MetadataResult.Fallback(fallbackSong)
+            ScanMetadataResult.Fallback(fallbackSong)
         } finally {
             tempFile.delete()
         }

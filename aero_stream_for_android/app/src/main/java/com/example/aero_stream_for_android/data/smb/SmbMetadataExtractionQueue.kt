@@ -6,8 +6,11 @@ import com.example.aero_stream_for_android.data.local.db.dao.SongDao
 import com.example.aero_stream_for_android.data.remote.smb.SmbFileInfo
 import com.example.aero_stream_for_android.data.remote.smb.SmbMediaDataSource
 import com.example.aero_stream_for_android.data.remote.smb.SmbMetadataExtractor
+import com.example.aero_stream_for_android.data.repository.toSongEntity
+import com.example.aero_stream_for_android.data.scan.ScanMetadataResult
 import com.example.aero_stream_for_android.domain.model.SmbConfig
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.SongMetadataState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,8 +52,7 @@ class SmbMetadataExtractionQueue @Inject constructor(
     }
     
     fun enqueueExtraction(config: SmbConfig, song: Song) {
-        if (song.smbPath == null || song.duration > 0L) {
-            // Already has metadata or not an SMB song
+        if (song.smbPath == null || song.metadataState != SongMetadataState.UNSCANNED) {
             return
         }
         
@@ -98,11 +100,13 @@ class SmbMetadataExtractionQueue @Inject constructor(
     
     private suspend fun processRequest(request: Request) {
         val path = request.song.smbPath ?: return
-        val configId = request.config.id
-        
+
         // Double check if metadata was already extracted
         val existingEntity = songDao.getSongBySmbPath(path)
-        if (existingEntity == null || existingEntity.duration > 0L) {
+        if (
+            existingEntity == null ||
+            existingEntity.metadataState != SongMetadataState.UNSCANNED.name
+        ) {
             return
         }
         val fileInfo = SmbFileInfo(
@@ -121,50 +125,24 @@ class SmbMetadataExtractionQueue @Inject constructor(
             toSong = { _ -> request.song }
         )
         
-        if (result is MetadataResult.Success || result is MetadataResult.Fallback) {
+        if (result is ScanMetadataResult.Success || result is ScanMetadataResult.Fallback) {
             val updatedSong = when (result) {
-                is MetadataResult.Success -> result.song
-                is MetadataResult.Fallback -> result.song
+                is ScanMetadataResult.Success -> result.song
+                is ScanMetadataResult.Fallback -> result.song
                 else -> request.song
             }
             
-            // Only update the database if we actually gained some new metadata
-            if (updatedSong.duration > 0L || updatedSong.albumArtUri != null) {
+            if (
+                updatedSong.duration > 0L ||
+                updatedSong.albumArtUri != null ||
+                updatedSong.metadataState != SongMetadataState.UNSCANNED
+            ) {
                 Log.d("SmbExtractionQueue", "Updating metadata in DB for: $path")
-                songDao.updateSong(updatedSong.toEntity())
+                songDao.updateSong(updatedSong.toSongEntity())
             }
         }
     }
-    
-    // Mapping extension to avoid exposing internal entities everywhere if possible
-    private fun Song.toEntity(): com.example.aero_stream_for_android.data.local.db.entity.SongEntity {
-        return com.example.aero_stream_for_android.data.local.db.entity.SongEntity(
-            id = id,
-            title = title,
-            artist = artist,
-            albumArtist = albumArtist,
-            album = album,
-            duration = duration,
-            albumArtUri = albumArtUri?.toString(),
-            source = source.name,
-            smbPath = smbPath,
-            smbConfigId = smbConfigId,
-            smbLibraryBucket = smbLibraryBucket,
-            localPath = localPath,
-            contentUri = contentUri?.toString(),
-            trackNumber = trackNumber,
-            fileSize = fileSize,
-            mimeType = mimeType,
-            smbLastWriteTime = smbLastWriteTime,
-            isCached = isCached,
-            cachedAt = cachedAt,
-            cacheLastPlayedAt = cacheLastPlayedAt,
-            lastPlayedAt = lastPlayedAt,
-            playCount = playCount,
-            sourceUpdatedAt = sourceUpdatedAt
-        )
-    }
-    
+
     private data class Request(
         val config: SmbConfig,
         val song: Song

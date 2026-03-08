@@ -41,11 +41,19 @@ data class Song(
     val cacheLastPlayedAt: Long? = null,
     /** ソースの最終更新時刻 */
     val sourceUpdatedAt: Long? = null,
+    /** メタデータ抽出状態 */
+    val metadataState: SongMetadataState = SongMetadataState.UNSCANNED,
     /** 最終再生日時 */
     val lastPlayedAt: Long? = null,
     /** 再生回数 */
     val playCount: Int = 0
 )
+
+enum class SongMetadataState {
+    UNSCANNED,
+    COMPLETE,
+    FALLBACK
+}
 
 enum class SongCacheStatus {
     CACHED,

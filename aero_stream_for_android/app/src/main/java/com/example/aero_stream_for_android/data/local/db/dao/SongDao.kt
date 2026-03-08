@@ -13,6 +13,9 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE source = :source ORDER BY title ASC")
     fun getSongsBySource(source: String): Flow<List<SongEntity>>
 
+    @Query("SELECT * FROM songs WHERE source = :source")
+    suspend fun getSongsBySourceList(source: String): List<SongEntity>
+
     @Query("SELECT * FROM songs WHERE source = 'SMB' AND isCached = 1 ORDER BY title ASC")
     fun getCachedSmbSongs(): Flow<List<SongEntity>>
 

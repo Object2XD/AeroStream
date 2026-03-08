@@ -90,11 +90,6 @@ fun SmbLibraryContent(
                             item { EmptyState("曲はまだありません") }
                         } else {
                             items(songs) { song ->
-                                if (song.duration == 0L || song.albumArtUri == null) {
-                                    androidx.compose.runtime.LaunchedEffect(song.id, song.sourceUpdatedAt) {
-                                        viewModel.requestMetadataExtraction(song)
-                                    }
-                                }
                                 SongListItem(
                                     song = song,
                                     onClick = {

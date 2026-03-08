@@ -33,6 +33,8 @@ class SmbLibraryScanWorker @AssistedInject constructor(
         const val KEY_SKIPPED_DIRECTORIES = "skipped_directories"
         const val KEY_TOTAL_COUNT = "total_count"
         const val KEY_PROCESSED_COUNT = "processed_count"
+        const val KEY_STAGED_COUNT = "staged_count"
+        const val KEY_DISCOVERY_COMPLETED = "discovery_completed"
         const val KEY_PROGRESS_PERCENT = "progress_percent"
         const val KEY_ESTIMATED_REMAINING_SEC = "estimated_remaining_sec"
         const val KEY_ELAPSED_SEC = "elapsed_sec"
@@ -71,6 +73,8 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                 KEY_SCANNED_COUNT to 0,
                 KEY_FAILED_COUNT to 0,
                 KEY_TOTAL_COUNT to 0,
+                KEY_STAGED_COUNT to 0,
+                KEY_DISCOVERY_COMPLETED to false,
                 KEY_PROGRESS_PERCENT to -1,
                 KEY_ESTIMATED_REMAINING_SEC to -1L,
                 KEY_RESULT_MESSAGE to SmbScanStage.CONNECTING.label
@@ -83,12 +87,16 @@ class SmbLibraryScanWorker @AssistedInject constructor(
             isCancelled = { isStopped },
             onProgress = { event ->
                 if (isStopped) return@refreshLibrary
-                val eta = SmbScanEtaEstimator.estimate(
-                    stage = event.stage,
-                    processedCount = event.processedCount,
-                    totalCount = event.totalCount,
-                    elapsedMillis = System.currentTimeMillis() - scanStartedAtMs
-                )
+                val eta = if (event.discoveryCompleted) {
+                    SmbScanEtaEstimator.estimate(
+                        stage = event.stage,
+                        processedCount = event.processedCount,
+                        totalCount = event.totalCount,
+                        elapsedMillis = System.currentTimeMillis() - scanStartedAtMs
+                    )
+                } else {
+                    SmbScanEta(progressPercent = null, estimatedRemainingSec = null)
+                }
                 val elapsedSec = ((System.currentTimeMillis() - scanStartedAtMs) / 1000L).coerceAtLeast(0L)
                 setProgressAsync(
                     workDataOf(
@@ -100,6 +108,8 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                         KEY_FAILED_COUNT to event.failedCount,
                         KEY_SKIPPED_DIRECTORIES to event.skippedDirectories,
                         KEY_TOTAL_COUNT to event.totalCount,
+                        KEY_STAGED_COUNT to event.stagedCount,
+                        KEY_DISCOVERY_COMPLETED to event.discoveryCompleted,
                         KEY_PROGRESS_PERCENT to (eta.progressPercent ?: -1),
                         KEY_ESTIMATED_REMAINING_SEC to (eta.estimatedRemainingSec ?: -1L),
                         KEY_RESULT_MESSAGE to buildProgressMessage(event)
@@ -129,6 +139,8 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                     KEY_SCANNED_COUNT to 0,
                     KEY_FAILED_COUNT to 0,
                     KEY_SKIPPED_DIRECTORIES to 0,
+                    KEY_STAGED_COUNT to 0,
+                    KEY_DISCOVERY_COMPLETED to false,
                     KEY_PROGRESS_PERCENT to -1,
                     KEY_ESTIMATED_REMAINING_SEC to -1L,
                     KEY_RESULT_MESSAGE to SmbScanStage.CANCELLED.label
@@ -142,10 +154,12 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                     KEY_SMB_CONFIG_ID to smbConfigId,
                     KEY_LAST_STAGE to SmbScanStage.COMPLETED.name,
                     KEY_ELAPSED_SEC to ((System.currentTimeMillis() - scanStartedAtMs) / 1000L).coerceAtLeast(0L),
-                    KEY_PROCESSED_COUNT to result.scannedCount + result.failedCount,
+                    KEY_PROCESSED_COUNT to result.stagedCount,
                     KEY_SCANNED_COUNT to result.scannedCount,
                     KEY_FAILED_COUNT to result.failedCount,
                     KEY_SKIPPED_DIRECTORIES to result.skippedDirectories,
+                    KEY_STAGED_COUNT to result.stagedCount,
+                    KEY_DISCOVERY_COMPLETED to true,
                     KEY_PROGRESS_PERCENT to 100,
                     KEY_ESTIMATED_REMAINING_SEC to 0L,
                     KEY_RESULT_MESSAGE to result.message
@@ -157,10 +171,12 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                     KEY_SMB_CONFIG_ID to smbConfigId,
                     KEY_LAST_STAGE to SmbScanStage.FAILED.name,
                     KEY_ELAPSED_SEC to ((System.currentTimeMillis() - scanStartedAtMs) / 1000L).coerceAtLeast(0L),
-                    KEY_PROCESSED_COUNT to result.scannedCount + result.failedCount,
+                    KEY_PROCESSED_COUNT to result.stagedCount,
                     KEY_SCANNED_COUNT to result.scannedCount,
                     KEY_FAILED_COUNT to result.failedCount,
                     KEY_SKIPPED_DIRECTORIES to result.skippedDirectories,
+                    KEY_STAGED_COUNT to result.stagedCount,
+                    KEY_DISCOVERY_COMPLETED to true,
                     KEY_PROGRESS_PERCENT to -1,
                     KEY_ESTIMATED_REMAINING_SEC to -1L,
                     KEY_RESULT_MESSAGE to result.message
@@ -172,13 +188,15 @@ class SmbLibraryScanWorker @AssistedInject constructor(
     private fun buildProgressMessage(event: ScanProgressEvent): String {
         return buildString {
             append(event.stage.label)
-            if (event.totalCount > 0) {
+            if (!event.discoveryCompleted) {
+                append(" ${event.scannedCount}件")
+            } else if (event.totalCount > 0) {
                 append(" ${event.processedCount}/${event.totalCount}件")
                 val percent = ((event.processedCount * 100.0) / event.totalCount)
                     .toInt()
                     .coerceIn(0, 100)
                 append(" (${percent}%)")
-            } else if (event.stage == SmbScanStage.ANALYZING || event.processedCount > 0) {
+            } else if (event.processedCount > 0) {
                 append(" ${event.processedCount}件")
             }
             if (event.failedCount > 0) {
@@ -262,10 +280,12 @@ class SmbLibraryScanWorker @AssistedInject constructor(
     ): Pair<String, String> {
         val line1 = buildString {
             append(stage.label)
-            if (totalCount > 0) {
+            if (progressPercent != null && totalCount > 0) {
                 append(" ${processedCount.coerceAtMost(totalCount)}/${totalCount}件")
                 progressPercent?.let { append(" (${it}%)") }
-            } else if (stage == SmbScanStage.ANALYZING || processedCount > 0) {
+            } else if (stage == SmbScanStage.LISTING && totalCount > 0) {
+                append(" ${totalCount}件")
+            } else if (processedCount > 0) {
                 append(" ${processedCount}件")
             }
             if (failedCount > 0) {
@@ -275,7 +295,7 @@ class SmbLibraryScanWorker @AssistedInject constructor(
 
         val line2 = buildString {
             append("経過 ${SmbScanEtaEstimator.formatElapsed(elapsedSec)}")
-            if (stage == SmbScanStage.ANALYZING) {
+            if (stage == SmbScanStage.EXTRACTING || stage == SmbScanStage.STAGING || stage == SmbScanStage.COMMITTING) {
                 append(" ・ ")
                 if (estimatedRemainingSec != null) {
                     append("残り約 ${SmbScanEtaEstimator.formatRemaining(estimatedRemainingSec)}")

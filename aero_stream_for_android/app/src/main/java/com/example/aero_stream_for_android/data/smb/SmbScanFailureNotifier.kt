@@ -4,10 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationCompat
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import com.example.aero_stream_for_android.R
+import com.example.aero_stream_for_android.data.local.db.dao.LibraryScanStatusDao
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
+import com.example.aero_stream_for_android.domain.model.MusicSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,7 +17,8 @@ import kotlinx.coroutines.withContext
 @Singleton
 class SmbScanFailureNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val statusDao: LibraryScanStatusDao
 ) {
     companion object {
         private const val CHANNEL_ID = "smb_library_scan"
@@ -27,17 +28,14 @@ class SmbScanFailureNotifier @Inject constructor(
     suspend fun notifyIfLatestFailedForSelectedConfig() = withContext(Dispatchers.IO) {
         settingsRepository.migrateLegacySmbConfigIfNeeded()
         val config = settingsRepository.getSelectedSmbConfig() ?: return@withContext
-        val workInfos = WorkManager.getInstance(context)
-            .getWorkInfosForUniqueWork("smb_scan_${config.id}")
-            .get()
-        val latest = workInfos.firstOrNull() ?: return@withContext
-        if (latest.state != WorkInfo.State.FAILED) return@withContext
+        val latest = statusDao.getStatus(MusicSource.SMB.name, config.id) ?: return@withContext
+        if (latest.lastResult != SmbStoredScanResult.FAILED.name) return@withContext
 
-        val dedupeKey = "${config.id}:${latest.id}"
+        val dedupeKey = "${config.id}:${latest.lastCompletedAt}:${latest.lastResult}"
         if (settingsRepository.getLastNotifiedSmbScanFailureKey() == dedupeKey) return@withContext
 
-        val message = latest.outputData.getString(SmbLibraryScanWorker.KEY_RESULT_MESSAGE)
-            ?.takeIf { it.isNotBlank() }
+        val message = latest.lastMessage
+            .takeIf { it.isNotBlank() }
             ?: "SMBライブラリ更新に失敗しました"
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

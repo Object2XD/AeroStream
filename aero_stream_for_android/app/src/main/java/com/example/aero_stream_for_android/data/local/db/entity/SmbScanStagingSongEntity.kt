@@ -1,23 +1,28 @@
 package com.example.aero_stream_for_android.data.local.db.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/**
- * 楽曲のRoomエンティティ。
- * ローカル / SMB / ダウンロード全ソースのメタデータをキャッシュする。
- */
-@Entity(tableName = "songs")
-data class SongEntity(
+@Entity(
+    tableName = "smb_scan_staging_songs",
+    indices = [
+        Index(value = ["scanSessionId"]),
+        Index(value = ["scanSessionId", "smbPath"])
+    ]
+)
+data class SmbScanStagingSongEntity(
     @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
+    val stagingId: Long = 0,
+    val scanSessionId: String,
+    val songId: Long = 0,
     val title: String,
     val artist: String,
     val albumArtist: String = "",
     val album: String,
     val duration: Long,
     val albumArtUri: String? = null,
-    val source: String, // LOCAL, SMB, DOWNLOAD
+    val source: String,
     val smbPath: String? = null,
     val smbConfigId: String? = null,
     val smbLibraryBucket: String? = null,
@@ -30,9 +35,9 @@ data class SongEntity(
     val isCached: Boolean = false,
     val cachedAt: Long? = null,
     val cacheLastPlayedAt: Long? = null,
+    val sourceUpdatedAt: Long? = null,
     val metadataState: String = "UNSCANNED",
     val lastPlayedAt: Long? = null,
     val playCount: Int = 0,
-    val sourceUpdatedAt: Long? = null,
     val addedAt: Long = System.currentTimeMillis()
 )

@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import com.example.aero_stream_for_android.data.local.db.AeroDatabase
 import com.example.aero_stream_for_android.data.local.db.dao.DownloadDao
+import com.example.aero_stream_for_android.data.local.db.dao.LibraryScanStagingDao
+import com.example.aero_stream_for_android.data.local.db.dao.LibraryScanStatusDao
 import com.example.aero_stream_for_android.data.local.db.dao.PlaylistDao
 import com.example.aero_stream_for_android.data.local.db.dao.SongDao
 import dagger.Module
@@ -30,11 +32,19 @@ object DatabaseModule {
             .addMigrations(AeroDatabase.MIGRATION_3_4)
             .addMigrations(AeroDatabase.MIGRATION_4_5)
             .addMigrations(AeroDatabase.MIGRATION_5_6)
+            .addMigrations(AeroDatabase.MIGRATION_6_7)
+            .addMigrations(AeroDatabase.MIGRATION_7_8)
             .build()
     }
 
     @Provides
     fun provideSongDao(db: AeroDatabase): SongDao = db.songDao()
+
+    @Provides
+    fun provideLibraryScanStagingDao(db: AeroDatabase): LibraryScanStagingDao = db.libraryScanStagingDao()
+
+    @Provides
+    fun provideLibraryScanStatusDao(db: AeroDatabase): LibraryScanStatusDao = db.libraryScanStatusDao()
 
     @Provides
     fun providePlaylistDao(db: AeroDatabase): PlaylistDao = db.playlistDao()

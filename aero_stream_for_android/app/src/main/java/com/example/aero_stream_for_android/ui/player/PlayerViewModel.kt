@@ -7,6 +7,7 @@ import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.PlayerState
 import com.example.aero_stream_for_android.domain.model.RepeatMode
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.SongMetadataState
 import com.example.aero_stream_for_android.player.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,7 @@ class PlayerViewModel @Inject constructor(
     val playerState: StateFlow<PlayerState> = playerManager.playerState
 
     fun playSong(song: Song) {
-        if (song.duration == 0L || song.albumArtUri == null) {
+        if (song.metadataState == SongMetadataState.UNSCANNED) {
             CoroutineScope(Dispatchers.IO).launch {
                 val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
                 smbMetadataExtractionQueue.enqueueExtraction(selectedConfig, song)
@@ -41,7 +42,7 @@ class PlayerViewModel @Inject constructor(
 
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
         val song = songs.getOrNull(startIndex)
-        if (song != null && (song.duration == 0L || song.albumArtUri == null)) {
+        if (song != null && song.metadataState == SongMetadataState.UNSCANNED) {
             CoroutineScope(Dispatchers.IO).launch {
                 val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
                 smbMetadataExtractionQueue.enqueueExtraction(selectedConfig, song)

@@ -3,12 +3,12 @@ package com.example.aero_stream_for_android.data.repository
 import android.net.Uri
 import com.example.aero_stream_for_android.data.local.db.dao.AlbumInfo
 import com.example.aero_stream_for_android.data.local.db.dao.SongDao
-import com.example.aero_stream_for_android.data.local.db.entity.SongEntity
-import com.example.aero_stream_for_android.data.local.mediastore.LocalMediaDataSource
+import com.example.aero_stream_for_android.data.scan.LibraryScanOrchestrator
+import com.example.aero_stream_for_android.data.scan.LocalScanSourceAdapter
 import com.example.aero_stream_for_android.domain.model.MusicSource
-import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.Artist
+import com.example.aero_stream_for_android.domain.model.Song
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -17,13 +17,14 @@ import javax.inject.Singleton
 @Singleton
 class MusicRepository @Inject constructor(
     private val songDao: SongDao,
-    private val localMediaDataSource: LocalMediaDataSource
+    private val orchestrator: LibraryScanOrchestrator,
+    private val localScanSourceAdapter: LocalScanSourceAdapter
 ) {
     /**
      * 全楽曲を監視する（全ソース統合）。
      */
     fun getAllSongs(): Flow<List<Song>> = songDao.getAllSongs().map { entities ->
-        entities.map { it.toDomain() }
+        entities.map { it.toDomainSong() }
     }
 
     /**
@@ -31,17 +32,17 @@ class MusicRepository @Inject constructor(
      */
     fun getSongsBySource(source: MusicSource): Flow<List<Song>> =
         songDao.getSongsBySource(source.name).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     fun getCachedSmbSongs(): Flow<List<Song>> =
         songDao.getCachedSmbSongs().map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     fun getSongsByAlbum(album: String, albumArtist: String): Flow<List<Song>> =
         songDao.getSongsByAlbum(album, albumArtist).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     fun getSongsByAlbumAndSource(
@@ -50,7 +51,7 @@ class MusicRepository @Inject constructor(
         source: MusicSource
     ): Flow<List<Song>> =
         songDao.getSongsByAlbumAndSource(album, albumArtist, source.name).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     fun getSongsByAlbumSourceAndSmbConfig(
@@ -65,12 +66,12 @@ class MusicRepository @Inject constructor(
             source = source.name,
             smbConfigId = smbConfigId
         ).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     fun getSongsBySourceAndSmbConfig(source: MusicSource, smbConfigId: String): Flow<List<Song>> =
         songDao.getSongsBySourceAndSmbConfig(source.name, smbConfigId).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     fun getSongsBySourceSmbConfigAndBuckets(
@@ -79,7 +80,7 @@ class MusicRepository @Inject constructor(
         buckets: List<String>
     ): Flow<List<Song>> =
         songDao.getSongsBySourceSmbConfigAndBuckets(source.name, smbConfigId, buckets).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     /**
@@ -87,7 +88,7 @@ class MusicRepository @Inject constructor(
      */
     fun searchSongs(query: String): Flow<List<Song>> =
         songDao.searchSongs(query).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     /**
@@ -95,7 +96,7 @@ class MusicRepository @Inject constructor(
      */
     fun getRecentlyPlayed(limit: Int = 20): Flow<List<Song>> =
         songDao.getRecentlyPlayed(limit).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     /**
@@ -103,7 +104,7 @@ class MusicRepository @Inject constructor(
      */
     fun getMostPlayed(limit: Int = 20): Flow<List<Song>> =
         songDao.getMostPlayed(limit).map { entities ->
-            entities.map { it.toDomain() }
+            entities.map { it.toDomainSong() }
         }
 
     /**
@@ -196,9 +197,11 @@ class MusicRepository @Inject constructor(
      * ローカルストレージの楽曲をスキャンしてDBに保存する。
      */
     suspend fun refreshLocalMusic() {
-        val localSongs = localMediaDataSource.scanLocalMusic()
-        songDao.deleteAllBySource(MusicSource.LOCAL.name)
-        songDao.insertSongs(localSongs.map { it.toEntity() })
+        orchestrator.refresh(
+            config = Unit,
+            adapter = localScanSourceAdapter,
+            quickScan = false
+        )
     }
 
     /**
@@ -214,76 +217,22 @@ class MusicRepository @Inject constructor(
      * IDで楽曲を取得する。
      */
     suspend fun getSongById(id: Long): Song? {
-        return songDao.getSongById(id)?.toDomain()
+        return songDao.getSongById(id)?.toDomainSong()
     }
 
     /**
      * 楽曲を保存する。
      */
     suspend fun insertSong(song: Song): Long {
-        return songDao.insertSong(song.toEntity())
+        return songDao.insertSong(song.toSongEntity())
     }
 
     /**
      * 楽曲リストを保存する。
      */
     suspend fun insertSongs(songs: List<Song>) {
-        songDao.insertSongs(songs.map { it.toEntity() })
+        songDao.insertSongs(songs.map { it.toSongEntity() })
     }
-
-    // --- Mapping ---
-
-    private fun SongEntity.toDomain(): Song = Song(
-        id = id,
-        title = title,
-        artist = artist,
-        albumArtist = albumArtist,
-        album = album,
-        duration = duration,
-        albumArtUri = albumArtUri?.let { Uri.parse(it) },
-        source = MusicSource.valueOf(source),
-        smbPath = smbPath,
-        smbConfigId = smbConfigId,
-        smbLibraryBucket = smbLibraryBucket,
-        localPath = localPath,
-        contentUri = contentUri?.let { Uri.parse(it) },
-        trackNumber = trackNumber,
-        fileSize = fileSize,
-        mimeType = mimeType,
-        smbLastWriteTime = smbLastWriteTime,
-        isCached = isCached,
-        cachedAt = cachedAt,
-        cacheLastPlayedAt = cacheLastPlayedAt,
-        sourceUpdatedAt = sourceUpdatedAt,
-        lastPlayedAt = lastPlayedAt,
-        playCount = playCount
-    )
-
-    private fun Song.toEntity(): SongEntity = SongEntity(
-        id = id,
-        title = title,
-        artist = artist,
-        albumArtist = albumArtist,
-        album = album,
-        duration = duration,
-        albumArtUri = albumArtUri?.toString(),
-        source = source.name,
-        smbPath = smbPath,
-        smbConfigId = smbConfigId,
-        smbLibraryBucket = smbLibraryBucket,
-        localPath = localPath,
-        contentUri = contentUri?.toString(),
-        trackNumber = trackNumber,
-        fileSize = fileSize,
-        mimeType = mimeType,
-        smbLastWriteTime = smbLastWriteTime,
-        isCached = isCached,
-        cachedAt = cachedAt,
-        cacheLastPlayedAt = cacheLastPlayedAt,
-        lastPlayedAt = lastPlayedAt,
-        playCount = playCount,
-        sourceUpdatedAt = sourceUpdatedAt
-    )
 
     private fun AlbumInfo.toAlbum(index: Int): Album {
         val total = count
