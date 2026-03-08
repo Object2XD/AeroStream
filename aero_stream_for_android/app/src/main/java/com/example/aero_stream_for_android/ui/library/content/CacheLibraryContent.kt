@@ -186,6 +186,7 @@ fun CacheLibraryContent(
             visible = scrollController.canScroll.value && downloadedSongs.isNotEmpty(),
             isNameSort = false,
             bubbleLabel = null,
+            bottomClearance = playerSheetBottomClearance,
             onSeekRequested = { seekProgress, animated ->
                 coroutineScope.launch {
                     scrollController.scrollToProgress(seekProgress, animated)

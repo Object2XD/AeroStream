@@ -272,6 +272,7 @@ fun SmbLibraryContent(
                 uiState.hasCachedContent,
             isNameSort = isNameSort,
             bubbleLabel = bubbleLabel,
+            bottomClearance = playerSheetBottomClearance,
             onSeekRequested = { seekProgress, animated ->
                 coroutineScope.launch {
                     scrollController.scrollToProgress(seekProgress, animated)

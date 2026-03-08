@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -22,6 +23,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 
 internal fun shouldShowFastScroller(visible: Boolean): Boolean = visible
@@ -87,6 +90,7 @@ internal fun LibraryFastScroller(
     isNameSort: Boolean,
     bubbleLabel: String?,
     onSeekRequested: (progress: Float, animated: Boolean) -> Unit,
+    bottomClearance: Dp = 0.dp,
     modifier: Modifier = Modifier
 ) {
     if (!shouldShowFastScroller(visible)) return
@@ -96,6 +100,7 @@ internal fun LibraryFastScroller(
 
     BoxWithConstraints(
         modifier = modifier
+            .padding(bottom = bottomClearance)
             .fillMaxHeight()
             .width(AeroCompactUiTokens.fastScrollerTouchWidth)
             .pointerInput(Unit) {

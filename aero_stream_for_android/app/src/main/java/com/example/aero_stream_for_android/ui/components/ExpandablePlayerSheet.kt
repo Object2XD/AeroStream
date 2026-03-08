@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
@@ -226,8 +227,6 @@ fun ExpandablePlayerSheet(
             AeroCompactUiTokens.playerSheetExpandedArtworkCornerRadius,
             expansionProgress
         )
-        val expandedBodyTopPadding = expandedArtworkSize + 24.dp
-
         if (scrimAlpha > 0.01f) {
             Box(
                 modifier = Modifier
@@ -306,21 +305,23 @@ fun ExpandablePlayerSheet(
                         }
                     }
 
-                    if (expandedContentProgress > 0.01f) {
-                        ExpandedPlayerBody(
-                            playerState = playerState,
-                            progress = expandedContentProgress,
-                            horizontalPadding = horizontalPadding,
-                            artworkTopPadding = expandedBodyTopPadding,
-                            onPlayPause = onPlayPause,
-                            onSkipNext = onSkipNext,
-                            onSkipPrevious = onSkipPrevious,
-                            onSeek = onSeek,
-                            onRepeatModeChange = onRepeatModeChange,
-                            onShuffleToggle = onShuffleToggle,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                }
+
+                if (expandedContentProgress > 0.01f) {
+                    ExpandedPlayerBottomControls(
+                        playerState = playerState,
+                        progress = expandedContentProgress,
+                        horizontalPadding = horizontalPadding,
+                        onPlayPause = onPlayPause,
+                        onSkipNext = onSkipNext,
+                        onSkipPrevious = onSkipPrevious,
+                        onSeek = onSeek,
+                        onRepeatModeChange = onRepeatModeChange,
+                        onShuffleToggle = onShuffleToggle,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                    )
                 }
 
                 SharedPlayerArtwork(
@@ -465,11 +466,10 @@ private fun ExpandedPlayerTopBar(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ExpandedPlayerBody(
+private fun ExpandedPlayerBottomControls(
     playerState: PlayerState,
     progress: Float,
     horizontalPadding: Dp,
-    artworkTopPadding: Dp,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
@@ -483,26 +483,32 @@ private fun ExpandedPlayerBody(
         mutableFloatStateOf(playerState.currentPosition.toFloat())
     }
     var isDragging by remember { mutableStateOf(false) }
+    val seekBarHeight by animateDpAsState(
+        targetValue = if (isDragging) {
+            AeroCompactUiTokens.playerSheetSeekBarDraggingHeight
+        } else {
+            AeroCompactUiTokens.playerSheetSeekBarIdleHeight
+        },
+        label = "player_seek_bar_height"
+    )
 
     Column(
         modifier = modifier
             .graphicsLayer {
                 alpha = progress
-                translationY = (1f - progress) * 36f
+                translationY = (1f - progress) * 20f
             }
             .padding(
                 start = horizontalPadding,
                 end = horizontalPadding,
-                top = artworkTopPadding,
-                bottom = AeroCompactUiTokens.playerSheetExpandedBottomPadding
-            ),
+                bottom = AeroCompactUiTokens.playerSheetExpandedControlsBottomPadding
+            )
+            .wrapContentHeight(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = song.title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 20.dp),
+            modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Start,
             maxLines = 2,
@@ -519,15 +525,6 @@ private fun ExpandedPlayerBody(
             overflow = TextOverflow.Ellipsis
         )
 
-        val seekBarHeight by animateDpAsState(
-            targetValue = if (isDragging) {
-                AeroCompactUiTokens.playerSheetSeekBarDraggingHeight
-            } else {
-                AeroCompactUiTokens.playerSheetSeekBarIdleHeight
-            },
-            label = "player_seek_bar_height"
-        )
-
         Slider(
             value = if (isDragging) sliderPosition else playerState.currentPosition.toFloat(),
             onValueChange = {
@@ -541,7 +538,7 @@ private fun ExpandedPlayerBody(
             valueRange = 0f..playerState.duration.toFloat().coerceAtLeast(1f),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp),
+                .padding(top = AeroCompactUiTokens.playerSheetExpandedControlsTopGap),
             thumb = {},
             track = { sliderState ->
                 SimplePlayerSliderTrack(
@@ -590,13 +587,11 @@ private fun ExpandedPlayerBody(
                 .padding(top = 20.dp)
         )
 
-        Spacer(modifier = Modifier.weight(1f))
-
         PlayerQueueSummary(
             playerState = playerState,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp)
+                .padding(top = AeroCompactUiTokens.playerSheetExpandedQueueSummaryTopPadding)
         )
     }
 }

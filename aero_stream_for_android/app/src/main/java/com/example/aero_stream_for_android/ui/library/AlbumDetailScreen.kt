@@ -151,6 +151,7 @@ fun AlbumDetailScreen(
                 uiState.error == null,
             isNameSort = false,
             bubbleLabel = null,
+            bottomClearance = playerSheetBottomClearance,
             onSeekRequested = { seekProgress, animated ->
                 coroutineScope.launch {
                     scrollController.scrollToProgress(seekProgress, animated)

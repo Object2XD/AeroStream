@@ -62,6 +62,10 @@ object AeroCompactUiTokens {
     val playerSheetExpandedBottomPadding = 28.dp
     val playerSheetExpandedArtworkMaxSize = 320.dp
     val playerSheetExpandedArtworkCornerRadius = 20.dp
+    val playerSheetExpandedMetadataTopGap = 20.dp
+    val playerSheetExpandedControlsTopGap = 24.dp
+    val playerSheetExpandedControlsBottomPadding = 28.dp
+    val playerSheetExpandedQueueSummaryTopPadding = 16.dp
     val playerSheetCollapsedCornerRadius = 28.dp
     val playerSheetTopBarVerticalPadding = 10.dp
     val playerSheetDragHandleWidth = 40.dp
