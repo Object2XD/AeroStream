@@ -1,6 +1,7 @@
 package com.example.aero_stream_for_android.ui.library.content
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
@@ -59,101 +61,112 @@ fun LocalLibraryContent(
 ) {
     val uiState by libraryViewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val scrollController = rememberLibraryScrollController(listState)
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 96.dp)
-    ) {
-        when (featureState.category) {
-            LibraryCategory.Songs -> {
-                val songs = uiState.songs
-                    .sortedWith(songComparator(featureState.sort.key, featureState.sort.order))
-                if (songs.isEmpty()) {
-                    item { LibraryEmptyState("曲はまだありません") }
-                } else {
-                    items(songs) { song ->
-                        LibrarySongRow(
-                            song = song,
-                            onClick = {
-                                playerViewModel.playQueue(songs, songs.indexOf(song))
-                                onNavigateToPlayer()
-                            },
-                            isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                            style = LibrarySongRowStyle.CompactNoBadge
-                        )
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 96.dp)
+        ) {
+            when (featureState.category) {
+                LibraryCategory.Songs -> {
+                    val songs = uiState.songs
+                        .sortedWith(songComparator(featureState.sort.key, featureState.sort.order))
+                    if (songs.isEmpty()) {
+                        item { LibraryEmptyState("曲はまだありません") }
+                    } else {
+                        items(songs) { song ->
+                            LibrarySongRow(
+                                song = song,
+                                onClick = {
+                                    playerViewModel.playQueue(songs, songs.indexOf(song))
+                                    onNavigateToPlayer()
+                                },
+                                isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
+                                style = LibrarySongRowStyle.CompactNoBadge
+                            )
+                        }
                     }
                 }
-            }
 
-            LibraryCategory.Albums -> {
-                val albums = uiState.albums
-                    .sortedWith(albumComparator(featureState.sort.key, featureState.sort.order))
-                if (albums.isEmpty()) {
-                    item { LibraryEmptyState("アルバムはまだありません") }
-                } else {
-                    items(albums) { album ->
-                        LibraryAlbumRow(
-                            albumName = album.name,
-                            subtitle = listOfNotNull("アルバム", album.artist, album.year?.toString()).joinToString("・"),
-                            albumArtUri = album.albumArtUri,
-                            onClick = { onNavigateToAlbumDetail(album, null, null) },
-                            showStatusBadge = false,
-                            isFullyCached = album.isFullyCached
-                        )
+                LibraryCategory.Albums -> {
+                    val albums = uiState.albums
+                        .sortedWith(albumComparator(featureState.sort.key, featureState.sort.order))
+                    if (albums.isEmpty()) {
+                        item { LibraryEmptyState("アルバムはまだありません") }
+                    } else {
+                        items(albums) { album ->
+                            LibraryAlbumRow(
+                                albumName = album.name,
+                                subtitle = listOfNotNull("アルバム", album.artist, album.year?.toString()).joinToString("・"),
+                                albumArtUri = album.albumArtUri,
+                                onClick = { onNavigateToAlbumDetail(album, null, null) },
+                                showStatusBadge = false,
+                                isFullyCached = album.isFullyCached
+                            )
+                        }
                     }
                 }
-            }
 
-            LibraryCategory.Artists -> {
-                val artists = uiState.artists
-                    .sortedWith(artistComparator(featureState.sort.key, featureState.sort.order))
-                if (artists.isEmpty()) {
-                    item { LibraryEmptyState("アーティストはまだありません") }
-                } else {
-                    items(artists) { artist ->
-                        LibraryArtistRow(
-                            artistName = artist.name,
-                            songCount = artist.songCount,
-                            onClick = {
-                                onNavigateToArtistDetail(artist.name, MusicSource.LOCAL, null)
-                            }
-                        )
+                LibraryCategory.Artists -> {
+                    val artists = uiState.artists
+                        .sortedWith(artistComparator(featureState.sort.key, featureState.sort.order))
+                    if (artists.isEmpty()) {
+                        item { LibraryEmptyState("アーティストはまだありません") }
+                    } else {
+                        items(artists) { artist ->
+                            LibraryArtistRow(
+                                artistName = artist.name,
+                                songCount = artist.songCount,
+                                onClick = {
+                                    onNavigateToArtistDetail(artist.name, MusicSource.LOCAL, null)
+                                }
+                            )
+                        }
                     }
                 }
-            }
 
-            LibraryCategory.Playlists -> {
-                val playlists = uiState.playlists
-                    .sortedWith(playlistComparator(featureState.sort.key, featureState.sort.order))
-                item {
-                    Button(
-                        onClick = { showCreatePlaylistDialog = true },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text("新規プレイリスト")
+                LibraryCategory.Playlists -> {
+                    val playlists = uiState.playlists
+                        .sortedWith(playlistComparator(featureState.sort.key, featureState.sort.order))
+                    item {
+                        Button(
+                            onClick = { showCreatePlaylistDialog = true },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("新規プレイリスト")
+                        }
+                    }
+                    if (playlists.isEmpty()) {
+                        item { LibraryEmptyState("プレイリストはまだありません") }
+                    } else {
+                        items(playlists) { playlist ->
+                            PlaylistRow(
+                                playlist = playlist,
+                                onDelete = { libraryViewModel.deletePlaylist(playlist.id) }
+                            )
+                        }
                     }
                 }
-                if (playlists.isEmpty()) {
-                    item { LibraryEmptyState("プレイリストはまだありません") }
-                } else {
-                    items(playlists) { playlist ->
-                        PlaylistRow(
-                            playlist = playlist,
-                            onDelete = { libraryViewModel.deletePlaylist(playlist.id) }
-                        )
-                    }
-                }
-            }
 
-            else -> {
-                item {
-                    LibraryEmptyState("このカテゴリはまだ利用できません")
+                else -> {
+                    item {
+                        LibraryEmptyState("このカテゴリはまだ利用できません")
+                    }
                 }
             }
         }
+
+        LibraryFastScroller(
+            progress = scrollController.progress.value,
+            visible = scrollController.canScroll.value,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
     }
 
     if (showCreatePlaylistDialog) {

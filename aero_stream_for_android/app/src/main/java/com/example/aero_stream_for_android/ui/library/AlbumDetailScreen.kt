@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.aero_stream_for_android.domain.model.isSmbSource
+import com.example.aero_stream_for_android.ui.library.content.LibraryFastScroller
+import com.example.aero_stream_for_android.ui.library.content.rememberLibraryScrollController
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import kotlinx.coroutines.flow.collectLatest
@@ -41,6 +43,7 @@ fun AlbumDetailScreen(
     val playerState by playerViewModel.playerState.collectAsState()
     val context = LocalContext.current
     val listState = rememberLazyListState()
+    val scrollController = rememberLibraryScrollController(listState)
     val density = LocalDensity.current
     val collapseThresholdPx = with(density) { 240.dp.toPx() }
     val collapsedProgress by remember(listState, collapseThresholdPx) {
@@ -134,6 +137,15 @@ fun AlbumDetailScreen(
                 }
             }
         }
+
+        LibraryFastScroller(
+            progress = scrollController.progress.value,
+            visible = scrollController.canScroll.value &&
+                uiState.songs.isNotEmpty() &&
+                !uiState.isLoading &&
+                uiState.error == null,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
 
         AlbumDetailTopOverlay(
             title = uiState.album?.name.orEmpty(),

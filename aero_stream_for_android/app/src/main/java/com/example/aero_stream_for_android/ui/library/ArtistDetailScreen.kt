@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -19,8 +20,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.ui.components.AeroTopBar
+import com.example.aero_stream_for_android.ui.library.content.LibraryFastScroller
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRow
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRowStyle
+import com.example.aero_stream_for_android.ui.library.content.rememberLibraryScrollController
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 
 @Composable
@@ -32,6 +35,8 @@ fun ArtistDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val scrollController = rememberLibraryScrollController(listState)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -85,29 +90,40 @@ fun ArtistDetailScreen(
             }
 
             else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        top = paddingValues.calculateTopPadding(),
-                        bottom = 96.dp
-                    )
-                ) {
-                    itemsIndexed(uiState.songs) { index, song ->
-                        LibrarySongRow(
-                            song = song,
-                            onClick = {
-                                playerViewModel.playQueue(uiState.songs, index)
-                                onNavigateToPlayer()
-                            },
-                            isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                            style = if (uiState.source == MusicSource.LOCAL) {
-                                LibrarySongRowStyle.CompactNoBadge
-                            } else {
-                                LibrarySongRowStyle.WithStatusBadge
-                            },
-                            modifier = Modifier
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = 96.dp
                         )
+                    ) {
+                        itemsIndexed(uiState.songs) { index, song ->
+                            LibrarySongRow(
+                                song = song,
+                                onClick = {
+                                    playerViewModel.playQueue(uiState.songs, index)
+                                    onNavigateToPlayer()
+                                },
+                                isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
+                                style = if (uiState.source == MusicSource.LOCAL) {
+                                    LibrarySongRowStyle.CompactNoBadge
+                                } else {
+                                    LibrarySongRowStyle.WithStatusBadge
+                                },
+                                modifier = Modifier
+                            )
+                        }
                     }
+
+                    LibraryFastScroller(
+                        progress = scrollController.progress.value,
+                        visible = scrollController.canScroll.value && uiState.songs.isNotEmpty(),
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(top = paddingValues.calculateTopPadding())
+                    )
                 }
             }
         }

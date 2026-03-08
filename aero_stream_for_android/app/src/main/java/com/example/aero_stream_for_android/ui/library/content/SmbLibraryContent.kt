@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
@@ -55,6 +56,8 @@ fun SmbLibraryContent(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val scrollController = rememberLibraryScrollController(listState)
 
     LaunchedEffect(openScanOptionsRequestToken) {
         if (openScanOptionsRequestToken > 0) {
@@ -90,143 +93,155 @@ fun SmbLibraryContent(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 96.dp)
-    ) {
-        when {
-            uiState.selectedSmbConfig == null -> {
-                item { LibraryEmptyState("SMBサーバーが設定されていません") }
-            }
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 96.dp)
+        ) {
+            when {
+                uiState.selectedSmbConfig == null -> {
+                    item { LibraryEmptyState("SMBサーバーが設定されていません") }
+                }
 
-            uiState.isLoading -> {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(260.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
+                uiState.isLoading -> {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(260.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     }
                 }
-            }
 
-            !uiState.hasCachedContent -> {
-                item { LibraryEmptyState("まだ SMB ライブラリを読み込んでいません") }
-            }
+                !uiState.hasCachedContent -> {
+                    item { LibraryEmptyState("まだ SMB ライブラリを読み込んでいません") }
+                }
 
-            else -> {
-                when (featureState.category) {
-                    LibraryCategory.Songs -> {
-                        val songs = uiState.songs
-                            .sortedWith(songComparator(featureState.sort.key, featureState.sort.order))
-                        if (songs.isEmpty()) {
-                            item { LibraryEmptyState("曲はまだありません") }
-                        } else {
-                            items(songs) { song ->
-                                LibrarySongRow(
-                                    song = song,
-                                    onClick = {
-                                        playerViewModel.playQueue(songs, songs.indexOf(song))
-                                        onNavigateToPlayer()
-                                    },
-                                    menuItems = when (song.cacheStatus) {
-                                        SongCacheStatus.SMB_NOT_CACHED -> listOf(
-                                            LibraryRowMenuItem(
-                                                id = "cache_add_${song.id}",
-                                                label = "キャッシュにダウンロード追加",
-                                                leadingIcon = Icons.Default.Download,
-                                                onClick = { viewModel.addSongToCache(song) }
+                else -> {
+                    when (featureState.category) {
+                        LibraryCategory.Songs -> {
+                            val songs = uiState.songs
+                                .sortedWith(songComparator(featureState.sort.key, featureState.sort.order))
+                            if (songs.isEmpty()) {
+                                item { LibraryEmptyState("曲はまだありません") }
+                            } else {
+                                items(songs) { song ->
+                                    LibrarySongRow(
+                                        song = song,
+                                        onClick = {
+                                            playerViewModel.playQueue(songs, songs.indexOf(song))
+                                            onNavigateToPlayer()
+                                        },
+                                        menuItems = when (song.cacheStatus) {
+                                            SongCacheStatus.SMB_NOT_CACHED -> listOf(
+                                                LibraryRowMenuItem(
+                                                    id = "cache_add_${song.id}",
+                                                    label = "キャッシュにダウンロード追加",
+                                                    leadingIcon = Icons.Default.Download,
+                                                    onClick = { viewModel.addSongToCache(song) }
+                                                )
                                             )
-                                        )
 
-                                        SongCacheStatus.CACHED -> listOf(
-                                            LibraryRowMenuItem(
-                                                id = "cache_remove_${song.id}",
-                                                label = "キャッシュから削除",
-                                                isDestructive = true,
-                                                leadingIcon = Icons.Default.Delete,
-                                                onClick = { viewModel.removeSongFromCache(song) }
+                                            SongCacheStatus.CACHED -> listOf(
+                                                LibraryRowMenuItem(
+                                                    id = "cache_remove_${song.id}",
+                                                    label = "キャッシュから削除",
+                                                    isDestructive = true,
+                                                    leadingIcon = Icons.Default.Delete,
+                                                    onClick = { viewModel.removeSongFromCache(song) }
+                                                )
                                             )
-                                        )
 
-                                        SongCacheStatus.NONE -> emptyList()
-                                    },
-                                    isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                                    style = LibrarySongRowStyle.WithStatusBadge
-                                )
+                                            SongCacheStatus.NONE -> emptyList()
+                                        },
+                                        isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
+                                        style = LibrarySongRowStyle.WithStatusBadge
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    LibraryCategory.Albums -> {
-                        val albums = uiState.albums
-                            .sortedWith(albumComparator(featureState.sort.key, featureState.sort.order))
-                        if (albums.isEmpty()) {
-                            item { LibraryEmptyState("アルバムはまだありません") }
-                        } else {
-                            items(albums) { album ->
-                                LibraryAlbumRow(
-                                    albumName = album.name,
-                                    subtitle = "アルバム・${album.artist}・${album.songCount}曲",
-                                    albumArtUri = album.albumArtUri,
-                                    showStatusBadge = true,
-                                    isFullyCached = album.isFullyCached,
-                                    menuItems = if (album.isFullyCached) {
-                                        listOf(
-                                            LibraryRowMenuItem(
-                                                id = "album_cache_remove_${album.name}_${album.artist}",
-                                                label = "キャッシュから削除",
-                                                isDestructive = true,
-                                                leadingIcon = Icons.Default.Delete,
-                                                onClick = { viewModel.removeAlbumFromCache(album) }
+                        LibraryCategory.Albums -> {
+                            val albums = uiState.albums
+                                .sortedWith(albumComparator(featureState.sort.key, featureState.sort.order))
+                            if (albums.isEmpty()) {
+                                item { LibraryEmptyState("アルバムはまだありません") }
+                            } else {
+                                items(albums) { album ->
+                                    LibraryAlbumRow(
+                                        albumName = album.name,
+                                        subtitle = "アルバム・${album.artist}・${album.songCount}曲",
+                                        albumArtUri = album.albumArtUri,
+                                        showStatusBadge = true,
+                                        isFullyCached = album.isFullyCached,
+                                        menuItems = if (album.isFullyCached) {
+                                            listOf(
+                                                LibraryRowMenuItem(
+                                                    id = "album_cache_remove_${album.name}_${album.artist}",
+                                                    label = "キャッシュから削除",
+                                                    isDestructive = true,
+                                                    leadingIcon = Icons.Default.Delete,
+                                                    onClick = { viewModel.removeAlbumFromCache(album) }
+                                                )
                                             )
-                                        )
-                                    } else {
-                                        listOf(
-                                            LibraryRowMenuItem(
-                                                id = "album_cache_add_${album.name}_${album.artist}",
-                                                label = "キャッシュにダウンロード追加",
-                                                leadingIcon = Icons.Default.Download,
-                                                onClick = { viewModel.addAlbumToCache(album) }
+                                        } else {
+                                            listOf(
+                                                LibraryRowMenuItem(
+                                                    id = "album_cache_add_${album.name}_${album.artist}",
+                                                    label = "キャッシュにダウンロード追加",
+                                                    leadingIcon = Icons.Default.Download,
+                                                    onClick = { viewModel.addAlbumToCache(album) }
+                                                )
                                             )
-                                        )
-                                    },
-                                    onClick = {
-                                        onNavigateToAlbumDetail(album, MusicSource.SMB, uiState.selectedSmbConfig?.id)
-                                    }
-                                )
+                                        },
+                                        onClick = {
+                                            onNavigateToAlbumDetail(album, MusicSource.SMB, uiState.selectedSmbConfig?.id)
+                                        }
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    LibraryCategory.Artists -> {
-                        val artists = uiState.artists
-                            .sortedWith(artistComparator(featureState.sort.key, featureState.sort.order))
-                        if (artists.isEmpty()) {
-                            item { LibraryEmptyState("アーティストはまだありません") }
-                        } else {
-                            items(artists) { artist ->
-                                LibraryArtistRow(
-                                    artistName = artist.name,
-                                    songCount = artist.songCount,
-                                    onClick = {
-                                        onNavigateToArtistDetail(
-                                            artist.name,
-                                            MusicSource.SMB,
-                                            uiState.selectedSmbConfig?.id
-                                        )
-                                    }
-                                )
+                        LibraryCategory.Artists -> {
+                            val artists = uiState.artists
+                                .sortedWith(artistComparator(featureState.sort.key, featureState.sort.order))
+                            if (artists.isEmpty()) {
+                                item { LibraryEmptyState("アーティストはまだありません") }
+                            } else {
+                                items(artists) { artist ->
+                                    LibraryArtistRow(
+                                        artistName = artist.name,
+                                        songCount = artist.songCount,
+                                        onClick = {
+                                            onNavigateToArtistDetail(
+                                                artist.name,
+                                                MusicSource.SMB,
+                                                uiState.selectedSmbConfig?.id
+                                            )
+                                        }
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    else -> item { LibraryEmptyState("このカテゴリはまだ利用できません") }
+                        else -> item { LibraryEmptyState("このカテゴリはまだ利用できません") }
+                    }
                 }
             }
         }
+
+        LibraryFastScroller(
+            progress = scrollController.progress.value,
+            visible = scrollController.canScroll.value &&
+                uiState.selectedSmbConfig != null &&
+                !uiState.isLoading &&
+                uiState.hasCachedContent,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
     }
 }
 
