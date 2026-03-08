@@ -123,6 +123,8 @@ fun ArtistDetailScreen(
                     LibraryFastScroller(
                         progress = scrollController.progress.value,
                         visible = scrollController.canScroll.value && uiState.songs.isNotEmpty(),
+                        isNameSort = false,
+                        bubbleLabel = null,
                         onSeekRequested = { seekProgress, animated ->
                             coroutineScope.launch {
                                 scrollController.scrollToProgress(seekProgress, animated)

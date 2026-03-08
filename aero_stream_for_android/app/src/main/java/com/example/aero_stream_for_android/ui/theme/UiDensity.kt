@@ -31,6 +31,10 @@ object AeroCompactUiTokens {
     val fastScrollerTrackWidth = 3.dp
     val fastScrollerThumbWidth = 8.dp
     val fastScrollerThumbHeight = 24.dp
+    val fastScrollerBubbleMinWidth = 36.dp
+    val fastScrollerBubbleMinHeight = 28.dp
+    val fastScrollerBubbleGap = 10.dp
+    const val fastScrollerBubbleBackgroundAlpha = 0.92f
     val gridHorizontalSpacing = 16.dp
     val gridVerticalSpacing = 16.dp
     val gridCaptionSpacing = 8.dp

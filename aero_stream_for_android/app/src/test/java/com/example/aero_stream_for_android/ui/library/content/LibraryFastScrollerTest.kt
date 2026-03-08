@@ -8,6 +8,84 @@ import org.junit.Test
 class LibraryFastScrollerTest {
 
     @Test
+    fun normalizeAlphabetLabel_mapsAsciiAndFallbacksToHash() {
+        assertEquals("A", normalizeAlphabetLabel("alpha"))
+        assertEquals("Z", normalizeAlphabetLabel(" zeta"))
+        assertEquals("#", normalizeAlphabetLabel("1track"))
+        assertEquals("#", normalizeAlphabetLabel("あいうえお"))
+        assertEquals("#", normalizeAlphabetLabel(""))
+        assertEquals("#", normalizeAlphabetLabel(null))
+    }
+
+    @Test
+    fun shouldShowIndexBubble_requiresDragNameSortAndLabel() {
+        assertTrue(
+            shouldShowIndexBubble(
+                visible = true,
+                isDraggingScrollbar = true,
+                isNameSort = true,
+                bubbleLabel = "A"
+            )
+        )
+        assertFalse(
+            shouldShowIndexBubble(
+                visible = true,
+                isDraggingScrollbar = false,
+                isNameSort = true,
+                bubbleLabel = "A"
+            )
+        )
+        assertFalse(
+            shouldShowIndexBubble(
+                visible = true,
+                isDraggingScrollbar = true,
+                isNameSort = false,
+                bubbleLabel = "A"
+            )
+        )
+        assertFalse(
+            shouldShowIndexBubble(
+                visible = true,
+                isDraggingScrollbar = true,
+                isNameSort = true,
+                bubbleLabel = null
+            )
+        )
+        assertFalse(
+            shouldShowIndexBubble(
+                visible = true,
+                isDraggingScrollbar = true,
+                isNameSort = true,
+                bubbleLabel = " "
+            )
+        )
+    }
+
+    @Test
+    fun calculateBubbleTop_clampsAtTopAndBottom() {
+        assertEquals(
+            0f,
+            calculateBubbleTop(
+                thumbTopPx = -20f,
+                thumbHeightPx = 24f,
+                bubbleHeightPx = 28f,
+                containerHeightPx = 200f
+            ),
+            0.0001f
+        )
+        assertEquals(
+            172f,
+            calculateBubbleTop(
+                thumbTopPx = 195f,
+                thumbHeightPx = 24f,
+                bubbleHeightPx = 28f,
+                containerHeightPx = 200f
+            ),
+            0.0001f
+        )
+    }
+
+    @Test
     fun progressFromTouchY_mapsAndClamps() {
         assertEquals(0f, progressFromTouchY(yPx = -10f, containerHeightPx = 200f), 0.0001f)
         assertEquals(0f, progressFromTouchY(yPx = 0f, containerHeightPx = 200f), 0.0001f)

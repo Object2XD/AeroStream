@@ -147,6 +147,8 @@ fun AlbumDetailScreen(
                 uiState.songs.isNotEmpty() &&
                 !uiState.isLoading &&
                 uiState.error == null,
+            isNameSort = false,
+            bubbleLabel = null,
             onSeekRequested = { seekProgress, animated ->
                 coroutineScope.launch {
                     scrollController.scrollToProgress(seekProgress, animated)

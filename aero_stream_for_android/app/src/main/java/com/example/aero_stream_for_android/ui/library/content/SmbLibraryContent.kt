@@ -61,6 +61,33 @@ fun SmbLibraryContent(
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
     val coroutineScope = rememberCoroutineScope()
+    val isNameSort = featureState.sort.key == LibrarySortKey.Name
+    val bubbleLabel = if (isNameSort) {
+        val targetIndex = scrollController.progressToTarget(scrollController.progress.value).index
+        when (featureState.category) {
+            LibraryCategory.Songs -> normalizeAlphabetLabel(
+                uiState.songs
+                    .sortedWith(songComparator(featureState.sort.key, featureState.sort.order))
+                    .getOrNull(targetIndex)
+                    ?.title
+            )
+            LibraryCategory.Albums -> normalizeAlphabetLabel(
+                uiState.albums
+                    .sortedWith(albumComparator(featureState.sort.key, featureState.sort.order))
+                    .getOrNull(targetIndex)
+                    ?.name
+            )
+            LibraryCategory.Artists -> normalizeAlphabetLabel(
+                uiState.artists
+                    .sortedWith(artistComparator(featureState.sort.key, featureState.sort.order))
+                    .getOrNull(targetIndex)
+                    ?.name
+            )
+            else -> null
+        }
+    } else {
+        null
+    }
 
     LaunchedEffect(openScanOptionsRequestToken) {
         if (openScanOptionsRequestToken > 0) {
@@ -243,6 +270,8 @@ fun SmbLibraryContent(
                 uiState.selectedSmbConfig != null &&
                 !uiState.isLoading &&
                 uiState.hasCachedContent,
+            isNameSort = isNameSort,
+            bubbleLabel = bubbleLabel,
             onSeekRequested = { seekProgress, animated ->
                 coroutineScope.launch {
                     scrollController.scrollToProgress(seekProgress, animated)

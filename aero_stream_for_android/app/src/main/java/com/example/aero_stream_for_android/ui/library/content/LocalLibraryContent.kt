@@ -67,6 +67,42 @@ fun LocalLibraryContent(
     val scrollController = rememberLibraryScrollController(listState)
     val coroutineScope = rememberCoroutineScope()
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    val isNameSort = featureState.sort.key == LibrarySortKey.Name
+    val bubbleLabel = if (isNameSort) {
+        val targetIndex = scrollController.progressToTarget(scrollController.progress.value).index
+        when (featureState.category) {
+            LibraryCategory.Songs -> normalizeAlphabetLabel(
+                uiState.songs
+                    .sortedWith(songComparator(featureState.sort.key, featureState.sort.order))
+                    .getOrNull(targetIndex)
+                    ?.title
+            )
+            LibraryCategory.Albums -> normalizeAlphabetLabel(
+                uiState.albums
+                    .sortedWith(albumComparator(featureState.sort.key, featureState.sort.order))
+                    .getOrNull(targetIndex)
+                    ?.name
+            )
+            LibraryCategory.Artists -> normalizeAlphabetLabel(
+                uiState.artists
+                    .sortedWith(artistComparator(featureState.sort.key, featureState.sort.order))
+                    .getOrNull(targetIndex)
+                    ?.name
+            )
+            LibraryCategory.Playlists -> {
+                val dataIndex = targetIndex - 1
+                normalizeAlphabetLabel(
+                    uiState.playlists
+                        .sortedWith(playlistComparator(featureState.sort.key, featureState.sort.order))
+                        .getOrNull(dataIndex)
+                        ?.name
+                )
+            }
+            else -> null
+        }
+    } else {
+        null
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -168,6 +204,8 @@ fun LocalLibraryContent(
         LibraryFastScroller(
             progress = scrollController.progress.value,
             visible = scrollController.canScroll.value,
+            isNameSort = isNameSort,
+            bubbleLabel = bubbleLabel,
             onSeekRequested = { seekProgress, animated ->
                 coroutineScope.launch {
                     scrollController.scrollToProgress(seekProgress, animated)
