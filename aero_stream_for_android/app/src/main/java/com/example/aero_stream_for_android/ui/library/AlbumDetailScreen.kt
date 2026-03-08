@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +31,7 @@ import com.example.aero_stream_for_android.ui.library.content.rememberLibraryScr
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 @Composable
 fun AlbumDetailScreen(
@@ -44,6 +46,7 @@ fun AlbumDetailScreen(
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
+    val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val collapseThresholdPx = with(density) { 240.dp.toPx() }
     val collapsedProgress by remember(listState, collapseThresholdPx) {
@@ -144,6 +147,11 @@ fun AlbumDetailScreen(
                 uiState.songs.isNotEmpty() &&
                 !uiState.isLoading &&
                 uiState.error == null,
+            onSeekRequested = { seekProgress, animated ->
+                coroutineScope.launch {
+                    scrollController.scrollToProgress(seekProgress, animated)
+                }
+            },
             modifier = Modifier.align(Alignment.CenterEnd)
         )
 

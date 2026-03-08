@@ -13,6 +13,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import com.example.aero_stream_for_android.ui.library.content.LibrarySongRow
 import com.example.aero_stream_for_android.ui.library.content.LibrarySongRowStyle
 import com.example.aero_stream_for_android.ui.library.content.rememberLibraryScrollController
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ArtistDetailScreen(
@@ -37,6 +39,7 @@ fun ArtistDetailScreen(
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -120,6 +123,11 @@ fun ArtistDetailScreen(
                     LibraryFastScroller(
                         progress = scrollController.progress.value,
                         visible = scrollController.canScroll.value && uiState.songs.isNotEmpty(),
+                        onSeekRequested = { seekProgress, animated ->
+                            coroutineScope.launch {
+                                scrollController.scrollToProgress(seekProgress, animated)
+                            }
+                        },
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .padding(top = paddingValues.calculateTopPadding())

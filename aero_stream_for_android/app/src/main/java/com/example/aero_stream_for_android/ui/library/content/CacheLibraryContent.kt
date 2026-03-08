@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import com.example.aero_stream_for_android.ui.downloads.DownloadsViewModel
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
+import kotlinx.coroutines.launch
 
 @Composable
 fun CacheLibraryContent(
@@ -49,6 +51,7 @@ fun CacheLibraryContent(
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
+    val coroutineScope = rememberCoroutineScope()
     val activeDownloads = uiState.activeDownloads
     val downloadedSongs = uiState.downloadedSongs
 
@@ -181,6 +184,11 @@ fun CacheLibraryContent(
         LibraryFastScroller(
             progress = scrollController.progress.value,
             visible = scrollController.canScroll.value && downloadedSongs.isNotEmpty(),
+            onSeekRequested = { seekProgress, animated ->
+                coroutineScope.launch {
+                    scrollController.scrollToProgress(seekProgress, animated)
+                }
+            },
             modifier = Modifier.align(Alignment.CenterEnd)
         )
     }

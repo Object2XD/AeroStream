@@ -8,6 +8,26 @@ import org.junit.Test
 class LibraryFastScrollerTest {
 
     @Test
+    fun progressFromTouchY_mapsAndClamps() {
+        assertEquals(0f, progressFromTouchY(yPx = -10f, containerHeightPx = 200f), 0.0001f)
+        assertEquals(0f, progressFromTouchY(yPx = 0f, containerHeightPx = 200f), 0.0001f)
+        assertEquals(0.5f, progressFromTouchY(yPx = 100f, containerHeightPx = 200f), 0.0001f)
+        assertEquals(1f, progressFromTouchY(yPx = 250f, containerHeightPx = 200f), 0.0001f)
+        assertEquals(0f, progressFromTouchY(yPx = 10f, containerHeightPx = 0f), 0.0001f)
+    }
+
+    @Test
+    fun seekRequests_useExpectedAnimationModes() {
+        val (tapProgress, tapAnimated) = tapSeekRequest(yPx = 60f, containerHeightPx = 120f)
+        val (dragProgress, dragAnimated) = dragSeekRequest(yPx = 60f, containerHeightPx = 120f)
+
+        assertEquals(0.5f, tapProgress, 0.0001f)
+        assertEquals(0.5f, dragProgress, 0.0001f)
+        assertTrue(tapAnimated)
+        assertFalse(dragAnimated)
+    }
+
+    @Test
     fun normalizeProgress_clampsRange() {
         assertEquals(0f, normalizeProgress(currentScrollablePx = -100, totalScrollablePx = 1000), 0.0001f)
         assertEquals(0.5f, normalizeProgress(currentScrollablePx = 500, totalScrollablePx = 1000), 0.0001f)

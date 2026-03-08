@@ -7,15 +7,28 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 
 internal fun shouldShowFastScroller(visible: Boolean): Boolean = visible
+internal fun progressFromTouchY(yPx: Float, containerHeightPx: Float): Float {
+    if (containerHeightPx <= 0f) return 0f
+    return (yPx / containerHeightPx).coerceIn(0f, 1f)
+}
+internal fun tapSeekRequest(yPx: Float, containerHeightPx: Float): Pair<Float, Boolean> {
+    return progressFromTouchY(yPx = yPx, containerHeightPx = containerHeightPx) to true
+}
+internal fun dragSeekRequest(yPx: Float, containerHeightPx: Float): Pair<Float, Boolean> {
+    return progressFromTouchY(yPx = yPx, containerHeightPx = containerHeightPx) to false
+}
 
 internal fun calculateThumbTop(progress: Float, containerHeightPx: Float, thumbHeightPx: Float): Float {
     if (containerHeightPx <= 0f || thumbHeightPx <= 0f) return 0f
@@ -38,6 +51,7 @@ internal fun alignedTrackAndThumbX(
 internal fun LibraryFastScroller(
     progress: Float,
     visible: Boolean,
+    onSeekRequested: (progress: Float, animated: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (!shouldShowFastScroller(visible)) return
@@ -47,7 +61,35 @@ internal fun LibraryFastScroller(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
-            .width(AeroCompactUiTokens.fastScrollerTouchWidth),
+            .width(AeroCompactUiTokens.fastScrollerTouchWidth)
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val (seekProgress, animated) = tapSeekRequest(
+                        yPx = offset.y,
+                        containerHeightPx = size.height.toFloat()
+                    )
+                    onSeekRequested(seekProgress, animated)
+                }
+            }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragStart = { offset ->
+                        val (seekProgress, animated) = dragSeekRequest(
+                            yPx = offset.y,
+                            containerHeightPx = size.height.toFloat()
+                        )
+                        onSeekRequested(seekProgress, animated)
+                    },
+                    onVerticalDrag = { change, _ ->
+                        change.consume()
+                        val (seekProgress, animated) = dragSeekRequest(
+                            yPx = change.position.y,
+                            containerHeightPx = size.height.toFloat()
+                        )
+                        onSeekRequested(seekProgress, animated)
+                    }
+                )
+            },
         contentAlignment = Alignment.TopStart
     ) {
         val containerHeightPx = constraints.maxHeight.toFloat()

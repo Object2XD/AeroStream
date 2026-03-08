@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,7 @@ import com.example.aero_stream_for_android.ui.library.LibrarySortKey
 import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.smb.SmbLibraryViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun SmbLibraryContent(
@@ -58,6 +60,7 @@ fun SmbLibraryContent(
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(openScanOptionsRequestToken) {
         if (openScanOptionsRequestToken > 0) {
@@ -240,6 +243,11 @@ fun SmbLibraryContent(
                 uiState.selectedSmbConfig != null &&
                 !uiState.isLoading &&
                 uiState.hasCachedContent,
+            onSeekRequested = { seekProgress, animated ->
+                coroutineScope.launch {
+                    scrollController.scrollToProgress(seekProgress, animated)
+                }
+            },
             modifier = Modifier.align(Alignment.CenterEnd)
         )
     }

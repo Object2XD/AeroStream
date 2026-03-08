@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ import com.example.aero_stream_for_android.ui.library.LibrarySortKey
 import com.example.aero_stream_for_android.ui.library.LibraryViewModel
 import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun LocalLibraryContent(
@@ -63,6 +65,7 @@ fun LocalLibraryContent(
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scrollController = rememberLibraryScrollController(listState)
+    val coroutineScope = rememberCoroutineScope()
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -165,6 +168,11 @@ fun LocalLibraryContent(
         LibraryFastScroller(
             progress = scrollController.progress.value,
             visible = scrollController.canScroll.value,
+            onSeekRequested = { seekProgress, animated ->
+                coroutineScope.launch {
+                    scrollController.scrollToProgress(seekProgress, animated)
+                }
+            },
             modifier = Modifier.align(Alignment.CenterEnd)
         )
     }
