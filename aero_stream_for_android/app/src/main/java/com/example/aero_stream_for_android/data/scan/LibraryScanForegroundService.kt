@@ -46,19 +46,16 @@ class LibraryScanForegroundService : Service() {
         startForegroundIfNeeded(notificationCoordinator.buildPreparingNotification(this))
         serviceScope.launch {
             supervisor.activeScans.collectLatest { activeScans ->
-                if (activeScans.isEmpty()) {
+                val localActiveScans = activeScans.values
+                    .filter { it.source == com.example.aero_stream_for_android.domain.model.MusicSource.LOCAL }
+                if (localActiveScans.isEmpty()) {
                     stopForegroundAndSelf()
                     return@collectLatest
                 }
-                val cancelIntent = if (supervisor.hasCancellableScan()) {
-                    newCancelIntent(this@LibraryScanForegroundService)
-                } else {
-                    null
-                }
                 val notification = notificationCoordinator.buildProgressNotification(
                     context = this@LibraryScanForegroundService,
-                    activeStates = activeScans.values.toList(),
-                    cancelIntent = cancelIntent
+                    activeStates = localActiveScans,
+                    cancelIntent = null
                 )
                 startForegroundIfNeeded(notification)
                 notificationCoordinator.notificationManager(this@LibraryScanForegroundService)

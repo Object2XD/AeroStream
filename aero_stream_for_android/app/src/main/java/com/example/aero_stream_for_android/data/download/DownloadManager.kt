@@ -22,6 +22,10 @@ class DownloadManager @Inject constructor(
     private val downloadDao: DownloadDao,
     private val songDao: SongDao
 ) {
+    companion object {
+        private const val DOWNLOAD_WORK_TAG_PREFIX = "download_"
+    }
+
     private val workManager = WorkManager.getInstance(context)
 
     /**
@@ -85,9 +89,18 @@ class DownloadManager @Inject constructor(
      * ダウンロードをキャンセルする。
      */
     suspend fun cancelDownload(downloadId: Long) {
-        workManager.cancelAllWorkByTag("download_$downloadId")
+        workManager.cancelAllWorkByTag("$DOWNLOAD_WORK_TAG_PREFIX$downloadId")
         downloadDao.getDownloadById(downloadId)?.let { download ->
             downloadDao.updateDownload(download.copy(state = DownloadState.PAUSED))
+        }
+    }
+
+    /**
+     * 追跡中の全ダウンロードジョブを停止する。
+     */
+    suspend fun cancelAllDownloads() {
+        downloadDao.getAllDownloadIds().forEach { id ->
+            workManager.cancelAllWorkByTag("$DOWNLOAD_WORK_TAG_PREFIX$id")
         }
     }
 

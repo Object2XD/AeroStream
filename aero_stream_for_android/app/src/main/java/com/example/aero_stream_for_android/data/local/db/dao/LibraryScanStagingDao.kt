@@ -16,4 +16,15 @@ interface LibraryScanStagingDao {
 
     @Query("DELETE FROM library_scan_staging_songs WHERE scanSessionId = :scanSessionId")
     suspend fun deleteBySession(scanSessionId: String)
+
+    @Query(
+        """
+        DELETE FROM library_scan_staging_songs
+        WHERE scanSource = :scanSource AND scanSourceConfigId = :scanSourceConfigId
+        """
+    )
+    suspend fun deleteBySourceConfig(scanSource: String, scanSourceConfigId: String)
+
+    @Query("DELETE FROM library_scan_staging_songs")
+    fun clearAll()
 }

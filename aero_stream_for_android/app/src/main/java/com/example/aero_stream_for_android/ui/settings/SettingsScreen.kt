@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
@@ -67,6 +68,7 @@ fun SettingsScreen(
     var editorConfig by remember { mutableStateOf<SmbConfig?>(null) }
     var deleteTarget by remember { mutableStateOf<SmbConfig?>(null) }
     var refreshTargetConfigId by remember { mutableStateOf<String?>(null) }
+    var showClearLoadedMusicConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -141,6 +143,16 @@ fun SettingsScreen(
                     onDelete = { deleteTarget = it },
                     onRefresh = { configId -> refreshTargetConfigId = configId },
                     onBrowse = onNavigateToSmbBrowser
+                )
+            }
+
+            item {
+                SettingsSectionHeader("データ管理")
+            }
+            item {
+                ClearLoadedMusicDatabaseItem(
+                    isClearing = uiState.isClearingLoadedMusicDatabase,
+                    onClick = { showClearLoadedMusicConfirm = true }
                 )
             }
 
@@ -284,6 +296,78 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showClearLoadedMusicConfirm) {
+        ClearLoadedMusicDatabaseDialog(
+            isClearing = uiState.isClearingLoadedMusicDatabase,
+            onConfirm = {
+                viewModel.clearLoadedMusicDatabase()
+                showClearLoadedMusicConfirm = false
+            },
+            onDismiss = { showClearLoadedMusicConfirm = false }
+        )
+    }
+}
+
+@Composable
+internal fun ClearLoadedMusicDatabaseItem(
+    isClearing: Boolean,
+    onClick: () -> Unit
+) {
+    ListItem(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                enabled = !isClearing,
+                onClick = onClick
+            ),
+        headlineContent = { Text("読み込み済み曲DBをクリア") },
+        supportingContent = {
+            Text(
+                if (isClearing) {
+                    "クリア中..."
+                } else {
+                    "曲DB・ダウンロード履歴・キャッシュファイルを削除します"
+                }
+            )
+        },
+        leadingContent = {
+            Icon(Icons.Default.DeleteSweep, contentDescription = null)
+        }
+    )
+}
+
+@Composable
+internal fun ClearLoadedMusicDatabaseDialog(
+    isClearing: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = {
+            if (!isClearing) {
+                onDismiss()
+            }
+        },
+        title = { Text("読み込み済み曲DBをクリア") },
+        text = { Text("曲DB・ダウンロード履歴・キャッシュファイルを削除します。よろしいですか？") },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !isClearing
+            ) {
+                Text("クリア")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isClearing
+            ) {
+                Text("キャンセル")
+            }
+        }
+    )
 }
 
 @Composable

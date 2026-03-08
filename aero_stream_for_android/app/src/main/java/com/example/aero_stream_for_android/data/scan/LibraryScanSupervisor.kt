@@ -59,7 +59,9 @@ class LibraryScanSupervisor @Inject constructor(
                 progress = progress
             ))
         }
-        ensureForegroundService()
+        if (source == MusicSource.LOCAL) {
+            ensureForegroundService()
+        }
     }
 
     fun update(

@@ -16,6 +16,7 @@ import com.example.aero_stream_for_android.domain.model.SongMetadataState
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2ShareAccess
+import com.hierynomus.smbj.share.File as SmbjFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -43,6 +44,7 @@ class SmbMediaDataSource @Inject constructor(
     companion object {
         private const val TAG = "SmbMediaDataSource"
         private const val MAX_SCAN_RETRY = 2
+        private const val DIRECTORY_SCAN_WORKER_COUNT = 4
 
         private val AUDIO_EXTENSIONS = setOf(
             "mp3", "m4a", "flac", "ogg", "wav", "aac", "wma", "opus",
@@ -122,6 +124,41 @@ class SmbMediaDataSource @Inject constructor(
         val results = mutableListOf<SmbFileInfo>()
         scanRecursive(config, rootPath, results)
         results
+    }
+
+    suspend fun enumerateAudioFilesParallel(
+        config: SmbConfig,
+        rootPath: String = "",
+        onFile: suspend (SmbFileInfo) -> Unit,
+        onDirectorySkipped: () -> Unit = {}
+    ) = withContext(Dispatchers.IO) {
+        val normalizedRoot = normalizeSmbRootPath(rootPath)
+        val channel = Channel<SmbFileInfo>(capacity = Channel.UNLIMITED)
+        val semaphore = Semaphore(DIRECTORY_SCAN_WORKER_COUNT)
+
+        coroutineScope {
+            val producer = launch {
+                try {
+                    semaphore.withPermit {
+                        scanRecursiveToChannel(
+                            config = config,
+                            path = normalizedRoot,
+                            isRoot = true,
+                            channel = channel,
+                            onDirectorySkipped = onDirectorySkipped,
+                            semaphore = semaphore
+                        )
+                    }
+                } finally {
+                    channel.close()
+                }
+            }
+
+            for (file in channel) {
+                onFile(file)
+            }
+            producer.join()
+        }
     }
 
     suspend fun scanAllMusicAsSongs(
@@ -248,22 +285,29 @@ class SmbMediaDataSource @Inject constructor(
     private suspend fun scanRecursiveToChannel(
         config: SmbConfig,
         path: String,
+        isRoot: Boolean,
         channel: Channel<SmbFileInfo>,
-        progressTracker: SmbScanProgressTracker,
+        onDirectorySkipped: () -> Unit,
         semaphore: Semaphore
     ) {
         try {
             currentCoroutineContext().ensureActive()
             val listing = listDirectoryWithRetry(config, path)
             for (file in listing.audioFiles) {
-                progressTracker.onFileDiscovered(file.path)
                 channel.send(file)
             }
             coroutineScope {
                 for (dir in listing.directories) {
                     launch {
                         semaphore.withPermit {
-                            scanRecursiveToChannel(config, dir.path, channel, progressTracker, semaphore)
+                            scanRecursiveToChannel(
+                                config = config,
+                                path = dir.path,
+                                isRoot = false,
+                                channel = channel,
+                                onDirectorySkipped = onDirectorySkipped,
+                                semaphore = semaphore
+                            )
                         }
                     }
                 }
@@ -271,7 +315,8 @@ class SmbMediaDataSource @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            progressTracker.onDirectorySkipped()
+            if (isRoot) throw e
+            onDirectorySkipped()
             Log.w(TAG, "Failed to scan directory: $path", e)
         }
     }
@@ -367,6 +412,22 @@ class SmbMediaDataSource @Inject constructor(
         file.inputStream
     }
 
+    suspend fun openRandomAccessReader(
+        config: SmbConfig,
+        filePath: String
+    ): SmbRandomAccessReader = withContext(Dispatchers.IO) {
+        val share = connectionManager.getShare(config)
+        val smbFile = share.openFile(
+            filePath,
+            EnumSet.of(AccessMask.GENERIC_READ),
+            null,
+            EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ),
+            SMB2CreateDisposition.FILE_OPEN,
+            null
+        )
+        SmbjRandomAccessReader(smbFile)
+    }
+
     /**
      * SMBファイルの情報を取得する。
      */
@@ -424,8 +485,21 @@ class SmbMediaDataSource @Inject constructor(
             config = config,
             fileInfo = fileInfo,
             openFileStream = ::openFileStream,
+            openRandomAccessReader = ::openRandomAccessReader,
             toSong = ::toSong
         )
+    }
+
+    private class SmbjRandomAccessReader(
+        private val smbFile: SmbjFile
+    ) : SmbRandomAccessReader {
+        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+            return smbFile.read(buffer, position, offset, size)
+        }
+
+        override fun close() {
+            smbFile.close()
+        }
     }
 }
 

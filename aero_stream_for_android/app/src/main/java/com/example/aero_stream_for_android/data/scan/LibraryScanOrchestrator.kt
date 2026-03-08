@@ -18,7 +18,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,6 +52,11 @@ private sealed interface ScanWriteCommand {
         val result: ScanMetadataResult
     ) : ScanWriteCommand
 
+    data class MetadataFailed(
+        val currentPath: String?,
+        val result: ScanMetadataResult
+    ) : ScanWriteCommand
+
     data object FinalizeCommit : ScanWriteCommand
 }
 
@@ -65,10 +69,10 @@ class LibraryScanOrchestrator @Inject constructor(
 ) {
     companion object {
         private const val TAG = "LibraryScanOrchestrator"
-        private const val INCREMENTAL_BATCH_SIZE = 500
+        private const val INCREMENTAL_BATCH_SIZE = 100
         private const val FILE_TO_META_QUEUE_CAPACITY = 128
         private const val META_TO_DB_QUEUE_CAPACITY = 128
-        private const val META_WORKER_COUNT = 4
+        private const val META_WORKER_COUNT = 8
     }
 
     suspend fun <TConfig, TItem> refresh(
@@ -115,6 +119,7 @@ class LibraryScanOrchestrator @Inject constructor(
         try {
             ensureNotCancelled(isCancelled)
             markRunning()
+            stagingDao.deleteBySourceConfig(target.source.name, target.statusConfigId)
             onProgress(ScanProgressEvent(stage = LibraryScanStage.CONNECTING))
 
             val existingSongs = loadExistingSongs(target)
@@ -138,7 +143,8 @@ class LibraryScanOrchestrator @Inject constructor(
                                 startedAt = startedAt,
                                 previousStatus = previousStatus,
                                 progressTracker = progressTracker,
-                                dbQueue = dbQueue
+                                dbQueue = dbQueue,
+                                publishIncrementally = quickScan
                             )
                         )
                     } catch (t: Throwable) {
@@ -194,7 +200,6 @@ class LibraryScanOrchestrator @Inject constructor(
                 message = message
             )
         } catch (e: CancellationException) {
-            stagingDao.deleteBySession(scanSessionId)
             markTerminal(LibraryStoredScanResult.CANCELLED, LibraryScanStage.CANCELLED.label)
             RefreshResult(
                 success = false,
@@ -206,7 +211,6 @@ class LibraryScanOrchestrator @Inject constructor(
             )
         } catch (e: Exception) {
             Log.e(TAG, "refresh failed", e)
-            stagingDao.deleteBySession(scanSessionId)
             markTerminal(
                 LibraryStoredScanResult.FAILED,
                 e.message ?: "ライブラリの更新に失敗しました"
@@ -265,31 +269,33 @@ class LibraryScanOrchestrator @Inject constructor(
     ) {
         for (task in metaQueue) {
             ensureNotCancelled(isCancelled)
-            val extracted = when (val result = adapter.extractMetadata(config, task.item)) {
-                is ScanMetadataResult.Success -> result
-                is ScanMetadataResult.Fallback -> result
-                ScanMetadataResult.Error -> ScanMetadataResult.Fallback(
-                    adapter.toFallbackRecord(config, task.item)
-                )
+            when (val extracted = adapter.extractMetadata(config, task.item)) {
+                is ScanMetadataResult.Success -> {
+                    val finalEntity = adapter.mergeWithExisting(
+                        extractedSong = extracted.song,
+                        existingEntity = task.existingEntity,
+                        config = config,
+                        item = task.item
+                    )
+                    dbQueue.send(
+                        ScanWriteCommand.StageExtracted(
+                            entity = finalEntity,
+                            currentPath = adapter.currentPath(task.item),
+                            result = extracted
+                        )
+                    )
+                }
+
+                is ScanMetadataResult.Fallback,
+                ScanMetadataResult.Error -> {
+                    dbQueue.send(
+                        ScanWriteCommand.MetadataFailed(
+                            currentPath = adapter.currentPath(task.item),
+                            result = extracted
+                        )
+                    )
+                }
             }
-            val extractedSong = when (extracted) {
-                is ScanMetadataResult.Success -> extracted.song
-                is ScanMetadataResult.Fallback -> extracted.song
-                ScanMetadataResult.Error -> error("Error results must be converted before staging")
-            }
-            val finalEntity = adapter.mergeWithExisting(
-                extractedSong = extractedSong,
-                existingEntity = task.existingEntity,
-                config = config,
-                item = task.item
-            )
-            dbQueue.send(
-                ScanWriteCommand.StageExtracted(
-                    entity = finalEntity,
-                    currentPath = adapter.currentPath(task.item),
-                    result = extracted
-                )
-            )
         }
     }
 
@@ -299,14 +305,18 @@ class LibraryScanOrchestrator @Inject constructor(
         startedAt: Long,
         previousStatus: LibraryScanStatusEntity?,
         progressTracker: LibraryScanProgressTracker,
-        dbQueue: Channel<ScanWriteCommand>
+        dbQueue: Channel<ScanWriteCommand>,
+        publishIncrementally: Boolean
     ): DbWriterResult {
         val pendingBatch = mutableListOf<LibraryScanStagingSongEntity>()
 
-        suspend fun flushPending() {
+        suspend fun flushPending(publish: Boolean) {
             if (pendingBatch.isEmpty()) return
             stagingDao.insertSongs(pendingBatch.toList())
             pendingBatch.clear()
+            if (publish) {
+                publishStagedSongs(scanSessionId, target)
+            }
         }
 
         for (command in dbQueue) {
@@ -314,26 +324,32 @@ class LibraryScanOrchestrator @Inject constructor(
                 is ScanWriteCommand.StageExisting -> {
                     pendingBatch.add(command.entity.toStaging(scanSessionId, target))
                     progressTracker.onExistingRowStaged(command.currentPath)
-                    if (pendingBatch.size >= INCREMENTAL_BATCH_SIZE) {
-                        flushPending()
+                    if (publishIncrementally && pendingBatch.size >= INCREMENTAL_BATCH_SIZE) {
+                        flushPending(publish = true)
                     }
                 }
 
                 is ScanWriteCommand.StageExtracted -> {
                     pendingBatch.add(command.entity.toStaging(scanSessionId, target))
                     progressTracker.onExtractedRowStaged(command.currentPath, command.result)
-                    if (pendingBatch.size >= INCREMENTAL_BATCH_SIZE) {
-                        flushPending()
+                    if (publishIncrementally && pendingBatch.size >= INCREMENTAL_BATCH_SIZE) {
+                        flushPending(publish = true)
                     }
                 }
 
+                is ScanWriteCommand.MetadataFailed -> {
+                    progressTracker.onMetadataResult(command.currentPath, command.result)
+                }
+
                 ScanWriteCommand.FinalizeCommit -> {
-                    flushPending()
+                    flushPending(publish = false)
                     progressTracker.emitCommitting()
                     val committedAt = System.currentTimeMillis()
-                    val stagedSongs = stagingDao.getSongsBySession(scanSessionId)
+                    var committedCount = 0
                     database.withTransaction {
+                        val stagedSongs = stagingDao.getSongsBySession(scanSessionId)
                         replacePublishedSongs(target, stagedSongs.map { it.toSongEntity() })
+                        committedCount = stagedSongs.size
                         statusDao.upsert(
                             LibraryScanStatusEntity(
                                 sourceType = target.source.name,
@@ -347,12 +363,11 @@ class LibraryScanOrchestrator @Inject constructor(
                         )
                         stagingDao.deleteBySession(scanSessionId)
                     }
-                    return DbWriterResult(stagedCount = stagedSongs.size)
+                    return DbWriterResult(stagedCount = committedCount)
                 }
             }
         }
 
-        stagingDao.deleteBySession(scanSessionId)
         statusDao.upsert(
             LibraryScanStatusEntity(
                 sourceType = target.source.name,
@@ -387,11 +402,19 @@ class LibraryScanOrchestrator @Inject constructor(
         songDao.insertSongs(songs)
     }
 
+    private suspend fun publishStagedSongs(
+        scanSessionId: String,
+        target: LibraryScanTarget
+    ) {
+        val stagedSongs = stagingDao.getSongsBySession(scanSessionId)
+        replacePublishedSongs(target, stagedSongs.map { it.toSongEntity() })
+    }
+
     private fun buildSummaryMessage(progressTracker: LibraryScanProgressTracker): String {
         return buildString {
             append("${progressTracker.scannedCount()}件の曲を解析しました")
             if (progressTracker.failedCount() > 0) {
-                append(" / フォールバック ${progressTracker.failedCount()}件")
+                append(" / 失敗 ${progressTracker.failedCount()}件")
             }
         }
     }

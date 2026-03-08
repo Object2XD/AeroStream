@@ -31,26 +31,12 @@ class SmbScanSourceAdapter @Inject constructor(
         onDirectorySkipped: () -> Unit
     ) {
         val rootPath = normalizeSmbRootPath(config.rootPath)
-        val pendingDirectories = ArrayDeque<String>()
-        pendingDirectories.add(rootPath)
-
-        while (pendingDirectories.isNotEmpty()) {
-            val currentPath = pendingDirectories.removeFirst()
-            val listing = try {
-                smbMediaDataSource.listDirectoryWithRetry(config, currentPath)
-            } catch (e: Exception) {
-                if (currentPath == rootPath) throw e
-                onDirectorySkipped()
-                continue
-            }
-
-            listing.directories.forEach { directory ->
-                pendingDirectories.addLast(directory.path)
-            }
-            listing.audioFiles.forEach { fileInfo ->
-                onItem(fileInfo)
-            }
-        }
+        smbMediaDataSource.enumerateAudioFilesParallel(
+            config = config,
+            rootPath = rootPath,
+            onFile = onItem,
+            onDirectorySkipped = onDirectorySkipped
+        )
     }
 
     override fun buildFingerprint(item: SmbFileInfo): ScanItemFingerprint =

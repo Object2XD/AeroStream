@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.aero_stream_for_android.data.remote.smb.HostValidationResult
 import com.example.aero_stream_for_android.data.remote.smb.SmbConnectionTestResult
 import com.example.aero_stream_for_android.data.remote.smb.SmbConnectionManager
+import com.example.aero_stream_for_android.data.reset.LibraryDataResetService
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
 import com.example.aero_stream_for_android.domain.model.AudioEngine
@@ -24,14 +25,16 @@ data class SettingsUiState(
     val smbConfigs: List<SmbConfig> = emptyList(),
     val selectedSmbConfigId: String? = null,
     val isTestingConnection: Boolean = false,
-    val connectionTestResult: SmbConnectionTestResult? = null
+    val connectionTestResult: SmbConnectionTestResult? = null,
+    val isClearingLoadedMusicDatabase: Boolean = false
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val smbConnectionManager: SmbConnectionManager,
-    private val smbLibraryRepository: SmbLibraryRepository
+    private val smbLibraryRepository: SmbLibraryRepository,
+    private val libraryDataResetService: LibraryDataResetService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -123,5 +126,17 @@ class SettingsViewModel @Inject constructor(
 
     fun clearConnectionTestResult() {
         _uiState.update { it.copy(connectionTestResult = null) }
+    }
+
+    fun clearLoadedMusicDatabase() {
+        if (_uiState.value.isClearingLoadedMusicDatabase) return
+        _uiState.update { it.copy(isClearingLoadedMusicDatabase = true) }
+        viewModelScope.launch {
+            try {
+                libraryDataResetService.clearLoadedMusicDatabase()
+            } finally {
+                _uiState.update { it.copy(isClearingLoadedMusicDatabase = false) }
+            }
+        }
     }
 }

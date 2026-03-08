@@ -29,4 +29,7 @@ interface LibraryScanStatusDao {
         """
     )
     fun observeLastSuccessfulScanAt(sourceType: String, sourceConfigId: String): Flow<Long?>
+
+    @Query("DELETE FROM library_scan_status")
+    fun clearAll()
 }

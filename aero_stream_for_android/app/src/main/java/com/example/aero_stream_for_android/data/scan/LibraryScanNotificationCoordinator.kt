@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import androidx.core.app.NotificationCompat
+import androidx.work.ForegroundInfo
 import com.example.aero_stream_for_android.R
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -52,6 +53,15 @@ class LibraryScanNotificationCoordinator @Inject constructor() {
         activeStates: List<ActiveLibraryScanState>,
         cancelIntent: PendingIntent?
     ) = buildNotification(context, activeStates, cancelIntent)
+
+    fun buildForegroundInfo(
+        context: Context,
+        activeState: ActiveLibraryScanState,
+        cancelIntent: PendingIntent?
+    ): ForegroundInfo = ForegroundInfo(
+        NOTIFICATION_ID,
+        buildNotification(context, listOf(activeState), cancelIntent)
+    )
 
     fun ensureChannel(context: Context) {
         val channel = NotificationChannel(

@@ -122,16 +122,12 @@ class SmbMetadataExtractionQueue @Inject constructor(
             config = request.config,
             fileInfo = fileInfo,
             openFileStream = { cfg, filePath -> smbMediaDataSource.openFileStream(cfg, filePath) },
+            openRandomAccessReader = { cfg, filePath -> smbMediaDataSource.openRandomAccessReader(cfg, filePath) },
             toSong = { _ -> request.song }
         )
         
-        if (result is ScanMetadataResult.Success || result is ScanMetadataResult.Fallback) {
-            val updatedSong = when (result) {
-                is ScanMetadataResult.Success -> result.song
-                is ScanMetadataResult.Fallback -> result.song
-                else -> request.song
-            }
-            
+        if (result is ScanMetadataResult.Success) {
+            val updatedSong = result.song
             if (
                 updatedSong.duration > 0L ||
                 updatedSong.albumArtUri != null ||

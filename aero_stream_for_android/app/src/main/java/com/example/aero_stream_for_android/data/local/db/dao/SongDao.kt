@@ -236,6 +236,9 @@ interface SongDao {
     @Delete
     suspend fun deleteSong(song: SongEntity)
 
+    @Query("DELETE FROM songs")
+    fun clearAllSongs()
+
     @Query("DELETE FROM songs WHERE source = :source")
     suspend fun deleteAllBySource(source: String)
 

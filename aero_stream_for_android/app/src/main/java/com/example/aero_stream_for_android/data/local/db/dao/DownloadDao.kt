@@ -31,8 +31,14 @@ interface DownloadDao {
     @Delete
     suspend fun deleteDownload(download: DownloadEntity)
 
+    @Query("DELETE FROM downloads")
+    fun clearAllDownloads()
+
     @Query("DELETE FROM downloads WHERE smbPath = :smbPath")
     suspend fun deleteBySmbPath(smbPath: String)
+
+    @Query("SELECT id FROM downloads")
+    suspend fun getAllDownloadIds(): List<Long>
 
     @Query("UPDATE downloads SET state = :state, downloadedBytes = :bytes WHERE id = :id")
     suspend fun updateProgress(id: Long, state: String, bytes: Long)
