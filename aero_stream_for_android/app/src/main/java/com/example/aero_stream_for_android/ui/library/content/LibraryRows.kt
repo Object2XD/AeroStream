@@ -1,6 +1,7 @@
 package com.example.aero_stream_for_android.ui.library.content
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
@@ -22,8 +23,6 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +45,9 @@ import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.domain.model.SongCacheStatus
 import com.example.aero_stream_for_android.domain.model.cacheStatus
 import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
+import com.example.aero_stream_for_android.ui.components.AeroCard
+import com.example.aero_stream_for_android.ui.components.AeroModalSheet
+import com.example.aero_stream_for_android.ui.components.AeroSheetScaffold
 import com.example.aero_stream_for_android.ui.theme.AccentRed
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import com.example.aero_stream_for_android.ui.theme.Black
@@ -112,6 +114,7 @@ internal fun LibraryAlbumRow(
         if (hasMenu) {
             LibraryRowOverflowMenu(
                 menuItems = menuItems,
+                title = albumName,
                 expanded = menuExpanded,
                 onExpandedChange = { menuExpanded = it }
             )
@@ -256,6 +259,7 @@ internal fun LibrarySongRow(
         if (hasMenu) {
             LibraryRowOverflowMenu(
                 menuItems = menuItems,
+                title = song.title,
                 expanded = menuExpanded,
                 onExpandedChange = { menuExpanded = it }
             )
@@ -312,6 +316,7 @@ internal fun LibraryArtistRow(
         if (hasMenu) {
             LibraryRowOverflowMenu(
                 menuItems = menuItems,
+                title = "メニュー",
                 expanded = menuExpanded,
                 onExpandedChange = { menuExpanded = it }
             )
@@ -338,6 +343,7 @@ internal fun LibraryEmptyState(title: String) {
 @Composable
 private fun LibraryRowOverflowMenu(
     menuItems: List<LibraryRowMenuItem>,
+    title: String,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit
 ) {
@@ -348,36 +354,54 @@ private fun LibraryRowOverflowMenu(
                 contentDescription = "More options"
             )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { onExpandedChange(false) }
-        ) {
-            menuItems.forEach { item ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = item.label,
-                            color = if (item.isDestructive) {
-                                MaterialTheme.colorScheme.error
+        if (expanded) {
+            AeroModalSheet(onDismissRequest = { onExpandedChange(false) }) {
+                AeroSheetScaffold(
+                    title = title,
+                    onDismiss = { onExpandedChange(false) }
+                ) {
+                    menuItems.forEach { item ->
+                        AeroCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                            onClick = if (item.enabled) {
+                                {
+                                    onExpandedChange(false)
+                                    item.onClick()
+                                }
                             } else {
-                                MaterialTheme.colorScheme.onSurface
+                                null
                             }
-                        )
-                    },
-                    onClick = {
-                        onExpandedChange(false)
-                        item.onClick()
-                    },
-                    enabled = item.enabled,
-                    leadingIcon = item.leadingIcon?.let { icon ->
-                        {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null
-                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (item.leadingIcon != null) {
+                                    Icon(
+                                        imageVector = item.leadingIcon,
+                                        contentDescription = null,
+                                        tint = if (item.isDestructive) {
+                                            MaterialTheme.colorScheme.error
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                }
+                                Text(
+                                    text = item.label,
+                                    color = if (item.isDestructive) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
                         }
                     }
-                )
+                }
             }
         }
     }
