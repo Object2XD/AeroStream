@@ -69,6 +69,27 @@ class MusicRepository @Inject constructor(
             entities.map { it.toDomainSong() }
         }
 
+    fun getSongsByArtistAndSource(
+        artist: String,
+        source: MusicSource
+    ): Flow<List<Song>> =
+        songDao.getSongsByArtistAndSource(artist, source.name).map { entities ->
+            entities.map { it.toDomainSong() }
+        }
+
+    fun getSongsByArtistSourceAndSmbConfig(
+        artist: String,
+        source: MusicSource,
+        smbConfigId: String
+    ): Flow<List<Song>> =
+        songDao.getSongsByArtistSourceAndSmbConfig(
+            artist = artist,
+            source = source.name,
+            smbConfigId = smbConfigId
+        ).map { entities ->
+            entities.map { it.toDomainSong() }
+        }
+
     fun getSongsBySourceAndSmbConfig(source: MusicSource, smbConfigId: String): Flow<List<Song>> =
         songDao.getSongsBySourceAndSmbConfig(source.name, smbConfigId).map { entities ->
             entities.map { it.toDomainSong() }

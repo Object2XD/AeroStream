@@ -1,8 +1,6 @@
 package com.example.aero_stream_for_android.ui.library.content
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,13 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,22 +39,15 @@ import coil.compose.AsyncImage
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.domain.model.SongCacheStatus
 import com.example.aero_stream_for_android.domain.model.cacheStatus
-import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
-import com.example.aero_stream_for_android.ui.components.AeroCard
-import com.example.aero_stream_for_android.ui.components.AeroModalSheet
-import com.example.aero_stream_for_android.ui.components.AeroSheetScaffold
+import com.example.aero_stream_for_android.ui.components.menu.AeroActionMenuSheet
+import com.example.aero_stream_for_android.ui.components.menu.AeroMenuItem
+import com.example.aero_stream_for_android.ui.components.menu.AeroOverflowMenuTrigger
+import com.example.aero_stream_for_android.ui.components.menu.aeroMenuClickable
 import com.example.aero_stream_for_android.ui.theme.AccentRed
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
 import com.example.aero_stream_for_android.ui.theme.Black
 
-internal data class LibraryRowMenuItem(
-    val id: String,
-    val label: String,
-    val onClick: () -> Unit,
-    val enabled: Boolean = true,
-    val isDestructive: Boolean = false,
-    val leadingIcon: ImageVector? = null
-)
+internal typealias LibraryRowMenuItem = AeroMenuItem
 
 enum class LibrarySongRowStyle {
     WithStatusBadge,
@@ -79,7 +67,7 @@ internal fun LibraryAlbumRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val hasMenu = menuItems.hasMenuItems()
-    val rowModifier = Modifier.libraryRowClickable(
+    val rowModifier = Modifier.aeroMenuClickable(
         hasMenu = hasMenu,
         onClick = onClick,
         onOpenMenu = { menuExpanded = true }
@@ -129,13 +117,12 @@ internal fun LibrarySongRow(
     onClick: () -> Unit,
     menuItems: List<LibraryRowMenuItem> = emptyList(),
     isPlaying: Boolean = false,
-    showDownloadIcon: Boolean = false,
     style: LibrarySongRowStyle = LibrarySongRowStyle.WithStatusBadge,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val hasMenu = menuItems.hasMenuItems()
-    val rowModifier = modifier.libraryRowClickable(
+    val rowModifier = modifier.aeroMenuClickable(
         hasMenu = hasMenu,
         onClick = onClick,
         onOpenMenu = { menuExpanded = true }
@@ -245,17 +232,6 @@ internal fun LibrarySongRow(
             }
         }
 
-        if (showDownloadIcon && song.isCacheDownloadEligible) {
-            IconButton(onClick = { /* Download action */ }) {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = "Download",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(AeroCompactUiTokens.listOverflowIconSize)
-                )
-            }
-        }
-
         if (hasMenu) {
             LibraryRowOverflowMenu(
                 menuItems = menuItems,
@@ -278,7 +254,7 @@ internal fun LibraryArtistRow(
     var menuExpanded by remember { mutableStateOf(false) }
     val hasMenu = menuItems.hasMenuItems()
     val rowModifier = if (onClick != null) {
-        Modifier.libraryRowClickable(
+        Modifier.aeroMenuClickable(
             hasMenu = hasMenu,
             onClick = onClick,
             onOpenMenu = { menuExpanded = true }
@@ -348,74 +324,15 @@ private fun LibraryRowOverflowMenu(
     onExpandedChange: (Boolean) -> Unit
 ) {
     Box {
-        IconButton(onClick = { onExpandedChange(true) }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "More options"
-            )
-        }
-        if (expanded) {
-            AeroModalSheet(onDismissRequest = { onExpandedChange(false) }) {
-                AeroSheetScaffold(
-                    title = title,
-                    onDismiss = { onExpandedChange(false) }
-                ) {
-                    menuItems.forEach { item ->
-                        AeroCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 6.dp),
-                            onClick = if (item.enabled) {
-                                {
-                                    onExpandedChange(false)
-                                    item.onClick()
-                                }
-                            } else {
-                                null
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (item.leadingIcon != null) {
-                                    Icon(
-                                        imageVector = item.leadingIcon,
-                                        contentDescription = null,
-                                        tint = if (item.isDestructive) {
-                                            MaterialTheme.colorScheme.error
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                }
-                                Text(
-                                    text = item.label,
-                                    color = if (item.isDestructive) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        AeroOverflowMenuTrigger(onOpenMenu = { onExpandedChange(true) })
+        AeroActionMenuSheet(
+            items = menuItems,
+            title = title,
+            expanded = expanded,
+            onDismiss = { onExpandedChange(false) }
+        )
     }
 }
-
-@OptIn(ExperimentalFoundationApi::class)
-private fun Modifier.libraryRowClickable(
-    hasMenu: Boolean,
-    onClick: () -> Unit,
-    onOpenMenu: () -> Unit
-): Modifier = fillMaxWidth().combinedClickable(
-    onClick = onClick,
-    onLongClick = if (hasMenu) onOpenMenu else null
-)
 
 private fun List<LibraryRowMenuItem>.hasMenuItems(): Boolean = isNotEmpty()
 

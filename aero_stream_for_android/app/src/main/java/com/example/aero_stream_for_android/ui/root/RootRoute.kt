@@ -25,6 +25,12 @@ data class AlbumDetailRoute(
     val year: String
 ) : AppRoute
 
+data class ArtistDetailRoute(
+    val artistName: String,
+    val source: String,
+    val smbConfigId: String
+) : AppRoute
+
 data object SmbBrowserRoute : AppRoute
 
 fun routeToAppRoute(route: String?): AppRoute? = when {
@@ -35,16 +41,17 @@ fun routeToAppRoute(route: String?): AppRoute? = when {
     route == Screen.Settings.route -> SettingsRoute
     route.startsWith(Screen.SmbBrowser.route) -> SmbBrowserRoute
     route.startsWith(Screen.AlbumDetail.route) -> AlbumDetailRoute("", "", "", "", "")
+    route.startsWith(Screen.ArtistDetail.route) -> ArtistDetailRoute("", "", "")
     else -> null
 }
 
 fun AppRoute?.isBottomNavVisible(): Boolean = when (this) {
     SettingsRoute -> false
-    TopRoute, LibraryRoute, SearchRoute, is AlbumDetailRoute, SmbBrowserRoute, null -> true
+    TopRoute, LibraryRoute, SearchRoute, is AlbumDetailRoute, is ArtistDetailRoute, SmbBrowserRoute, null -> true
 }
 
 fun AppRoute?.toBottomNavSelectedPrimaryRoute(): RootPrimaryRoute? = when (this) {
     TopRoute -> RootPrimaryRoute.Top
-    LibraryRoute, is AlbumDetailRoute, SmbBrowserRoute -> RootPrimaryRoute.Library
+    LibraryRoute, is AlbumDetailRoute, is ArtistDetailRoute, SmbBrowserRoute -> RootPrimaryRoute.Library
     else -> null
 }

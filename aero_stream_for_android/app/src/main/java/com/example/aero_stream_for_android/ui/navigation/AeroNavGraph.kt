@@ -11,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.aero_stream_for_android.ui.home.HomeScreen
 import com.example.aero_stream_for_android.ui.library.AlbumDetailScreen
+import com.example.aero_stream_for_android.ui.library.ArtistDetailScreen
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.library.LibraryRouteScreen
 import com.example.aero_stream_for_android.ui.search.SearchScreen
@@ -60,6 +61,15 @@ fun AeroNavGraph(
                             year = album.year
                         )
                     )
+                },
+                onNavigateToArtistDetail = { artistName, source, smbConfigId ->
+                    navController.navigate(
+                        Screen.ArtistDetail.createRoute(
+                            artistName = artistName,
+                            source = source,
+                            smbConfigId = smbConfigId
+                        )
+                    )
                 }
             )
         }
@@ -102,6 +112,23 @@ fun AeroNavGraph(
             )
         ) {
             AlbumDetailScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToPlayer = onNavigateToPlayer
+            )
+        }
+
+        composable(
+            route = Screen.ArtistDetail.routePattern,
+            arguments = listOf(
+                navArgument(Screen.ArtistDetail.artistNameArg) { type = NavType.StringType },
+                navArgument(Screen.ArtistDetail.sourceArg) { type = NavType.StringType },
+                navArgument(Screen.ArtistDetail.smbConfigIdArg) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) {
+            ArtistDetailScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPlayer = onNavigateToPlayer
             )

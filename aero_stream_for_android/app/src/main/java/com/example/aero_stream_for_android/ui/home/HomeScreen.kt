@@ -93,7 +93,6 @@ fun HomeScreen(
                         emptyList()
                     },
                     isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                    showDownloadIcon = true,
                     style = LibrarySongRowStyle.WithStatusBadge
                 )
             }
@@ -138,7 +137,6 @@ fun HomeScreen(
                         emptyList()
                     },
                     isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                    showDownloadIcon = true,
                     style = LibrarySongRowStyle.WithStatusBadge
                 )
             }

@@ -47,6 +47,7 @@ fun SmbLibraryContent(
     featureState: LibraryFeatureState,
     onNavigateToPlayer: () -> Unit = {},
     onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> },
+    onNavigateToArtistDetail: (String, MusicSource?, String?) -> Unit = { _, _, _ -> },
     openScanOptionsRequestToken: Int = 0,
     cancelScanRequestToken: Int = 0,
     viewModel: SmbLibraryViewModel = hiltViewModel(),
@@ -209,7 +210,14 @@ fun SmbLibraryContent(
                             items(artists) { artist ->
                                 LibraryArtistRow(
                                     artistName = artist.name,
-                                    songCount = artist.songCount
+                                    songCount = artist.songCount,
+                                    onClick = {
+                                        onNavigateToArtistDetail(
+                                            artist.name,
+                                            MusicSource.SMB,
+                                            uiState.selectedSmbConfig?.id
+                                        )
+                                    }
                                 )
                             }
                         }

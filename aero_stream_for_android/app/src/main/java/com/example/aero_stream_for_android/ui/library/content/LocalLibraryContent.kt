@@ -53,6 +53,7 @@ fun LocalLibraryContent(
     featureState: LibraryFeatureState,
     onNavigateToPlayer: () -> Unit = {},
     onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> },
+    onNavigateToArtistDetail: (String, MusicSource?, String?) -> Unit = { _, _, _ -> },
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -79,7 +80,6 @@ fun LocalLibraryContent(
                                 onNavigateToPlayer()
                             },
                             isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                            showDownloadIcon = true,
                             style = LibrarySongRowStyle.CompactNoBadge
                         )
                     }
@@ -114,7 +114,10 @@ fun LocalLibraryContent(
                     items(artists) { artist ->
                         LibraryArtistRow(
                             artistName = artist.name,
-                            songCount = artist.songCount
+                            songCount = artist.songCount,
+                            onClick = {
+                                onNavigateToArtistDetail(artist.name, MusicSource.LOCAL, null)
+                            }
                         )
                     }
                 }

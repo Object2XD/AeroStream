@@ -21,7 +21,6 @@ fun SongListItem(
     onClick: () -> Unit,
     onMoreClick: (() -> Unit)? = null,
     isPlaying: Boolean = false,
-    showDownloadIcon: Boolean = false,
     style: SongListItemStyle = SongListItemStyle.WithStatusBadge,
     modifier: Modifier = Modifier
 ) {
@@ -43,7 +42,6 @@ fun SongListItem(
         onClick = onClick,
         menuItems = menuItems,
         isPlaying = isPlaying,
-        showDownloadIcon = showDownloadIcon,
         style = when (style) {
             SongListItemStyle.WithStatusBadge -> LibrarySongRowStyle.WithStatusBadge
             SongListItemStyle.CompactNoBadge -> LibrarySongRowStyle.CompactNoBadge

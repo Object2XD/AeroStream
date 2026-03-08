@@ -59,6 +59,31 @@ interface SongDao {
     ): Flow<List<SongEntity>>
 
     @Query(
+        """
+        SELECT * FROM songs
+        WHERE artist = :artist
+          AND source = :source
+        ORDER BY album ASC, trackNumber ASC, title ASC
+        """
+    )
+    fun getSongsByArtistAndSource(artist: String, source: String): Flow<List<SongEntity>>
+
+    @Query(
+        """
+        SELECT * FROM songs
+        WHERE artist = :artist
+          AND source = :source
+          AND smbConfigId = :smbConfigId
+        ORDER BY album ASC, trackNumber ASC, title ASC
+        """
+    )
+    fun getSongsByArtistSourceAndSmbConfig(
+        artist: String,
+        source: String,
+        smbConfigId: String
+    ): Flow<List<SongEntity>>
+
+    @Query(
         "SELECT * FROM songs WHERE source = :source AND smbConfigId = :smbConfigId ORDER BY title ASC"
     )
     fun getSongsBySourceAndSmbConfig(source: String, smbConfigId: String): Flow<List<SongEntity>>

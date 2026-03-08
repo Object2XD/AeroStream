@@ -13,14 +13,16 @@ fun LibraryRouteScreen(
     onNavigateToPlayer: () -> Unit = {},
     smbScanSheetRequestToken: Int = 0,
     smbScanCancelRequestToken: Int = 0,
-    onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> }
+    onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> },
+    onNavigateToArtistDetail: (String, MusicSource?, String?) -> Unit = { _, _, _ -> }
 ) {
     when (featureState.source) {
         LibrarySource.LocalFiles -> {
             LocalLibraryContent(
                 featureState = featureState,
                 onNavigateToPlayer = onNavigateToPlayer,
-                onNavigateToAlbumDetail = onNavigateToAlbumDetail
+                onNavigateToAlbumDetail = onNavigateToAlbumDetail,
+                onNavigateToArtistDetail = onNavigateToArtistDetail
             )
         }
 
@@ -30,7 +32,8 @@ fun LibraryRouteScreen(
                 onNavigateToPlayer = onNavigateToPlayer,
                 openScanOptionsRequestToken = smbScanSheetRequestToken,
                 cancelScanRequestToken = smbScanCancelRequestToken,
-                onNavigateToAlbumDetail = onNavigateToAlbumDetail
+                onNavigateToAlbumDetail = onNavigateToAlbumDetail,
+                onNavigateToArtistDetail = onNavigateToArtistDetail
             )
         }
 

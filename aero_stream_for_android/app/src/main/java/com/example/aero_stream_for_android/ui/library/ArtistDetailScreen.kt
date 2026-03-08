@@ -1,0 +1,115 @@
+package com.example.aero_stream_for_android.ui.library
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.aero_stream_for_android.domain.model.MusicSource
+import com.example.aero_stream_for_android.ui.components.AeroTopBar
+import com.example.aero_stream_for_android.ui.library.content.LibrarySongRow
+import com.example.aero_stream_for_android.ui.library.content.LibrarySongRowStyle
+import com.example.aero_stream_for_android.ui.player.PlayerViewModel
+
+@Composable
+fun ArtistDetailScreen(
+    onNavigateBack: () -> Unit,
+    onNavigateToPlayer: () -> Unit,
+    viewModel: ArtistDetailViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            AeroTopBar(
+                title = uiState.artistName.ifBlank { "アーティスト詳細" },
+                onNavigateBack = onNavigateBack
+            )
+        }
+    ) { paddingValues ->
+        when {
+            uiState.isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            uiState.error != null -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = uiState.error ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            uiState.songs.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "このアーティストの曲はありません",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = 96.dp
+                    )
+                ) {
+                    itemsIndexed(uiState.songs) { index, song ->
+                        LibrarySongRow(
+                            song = song,
+                            onClick = {
+                                playerViewModel.playQueue(uiState.songs, index)
+                                onNavigateToPlayer()
+                            },
+                            isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
+                            style = if (uiState.source == MusicSource.LOCAL) {
+                                LibrarySongRowStyle.CompactNoBadge
+                            } else {
+                                LibrarySongRowStyle.WithStatusBadge
+                            },
+                            modifier = Modifier
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

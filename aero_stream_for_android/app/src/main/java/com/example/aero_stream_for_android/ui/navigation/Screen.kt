@@ -105,6 +105,29 @@ sealed class Screen(
         }
     }
 
+    data object ArtistDetail : Screen(
+        route = "artist_detail",
+        title = "アーティスト詳細"
+    ) {
+        const val artistNameArg = "artistName"
+        const val sourceArg = "source"
+        const val smbConfigIdArg = "smbConfigId"
+
+        val routePattern =
+            "$route?$artistNameArg={$artistNameArg}&$sourceArg={$sourceArg}&$smbConfigIdArg={$smbConfigIdArg}"
+
+        fun createRoute(
+            artistName: String,
+            source: MusicSource?,
+            smbConfigId: String? = null
+        ): String {
+            val encodedArtistName = Uri.encode(artistName)
+            val encodedSource = source?.name.orEmpty()
+            val encodedSmbConfigId = Uri.encode(smbConfigId.orEmpty())
+            return "$route?$artistNameArg=$encodedArtistName&$sourceArg=$encodedSource&$smbConfigIdArg=$encodedSmbConfigId"
+        }
+    }
+
     companion object {
         val bottomNavItems = listOf(Home, Library)
     }
