@@ -3,11 +3,12 @@ package com.example.aero_stream_for_android.data.repository
 import android.net.Uri
 import com.example.aero_stream_for_android.data.local.db.dao.AlbumInfo
 import com.example.aero_stream_for_android.data.local.db.dao.SongDao
-import com.example.aero_stream_for_android.data.scan.LibraryScanOrchestrator
+import com.example.aero_stream_for_android.data.scan.LibraryScanManager
+import com.example.aero_stream_for_android.data.scan.LibraryScanProgress
 import com.example.aero_stream_for_android.data.scan.LocalScanSourceAdapter
-import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.Artist
+import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -17,8 +18,7 @@ import javax.inject.Singleton
 @Singleton
 class MusicRepository @Inject constructor(
     private val songDao: SongDao,
-    private val orchestrator: LibraryScanOrchestrator,
-    private val localScanSourceAdapter: LocalScanSourceAdapter
+    private val scanManager: LibraryScanManager
 ) {
     /**
      * 全楽曲を監視する（全ソース統合）。
@@ -197,12 +197,18 @@ class MusicRepository @Inject constructor(
      * ローカルストレージの楽曲をスキャンしてDBに保存する。
      */
     suspend fun refreshLocalMusic() {
-        orchestrator.refresh(
-            config = Unit,
-            adapter = localScanSourceAdapter,
+        scanManager.enqueueScan(
+            source = MusicSource.LOCAL,
+            sourceConfigId = LocalScanSourceAdapter.STATUS_CONFIG_ID,
             quickScan = false
         )
     }
+
+    fun observeLocalScanProgress(): Flow<LibraryScanProgress> =
+        scanManager.observeScanProgress(
+            source = MusicSource.LOCAL,
+            sourceConfigId = LocalScanSourceAdapter.STATUS_CONFIG_ID
+        )
 
     /**
      * 楽曲の再生統計を更新する。

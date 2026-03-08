@@ -2,15 +2,23 @@ package com.example.aero_stream_for_android.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
@@ -58,6 +66,7 @@ fun SettingsScreen(
     var showThemeSheet by remember { mutableStateOf(false) }
     var editorConfig by remember { mutableStateOf<SmbConfig?>(null) }
     var deleteTarget by remember { mutableStateOf<SmbConfig?>(null) }
+    var refreshTargetConfigId by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -130,7 +139,7 @@ fun SettingsScreen(
                         editorConfig = config
                     },
                     onDelete = { deleteTarget = it },
-                    onRefresh = { configId -> viewModel.refreshSmbLibrary(configId) },
+                    onRefresh = { configId -> refreshTargetConfigId = configId },
                     onBrowse = onNavigateToSmbBrowser
                 )
             }
@@ -206,6 +215,26 @@ fun SettingsScreen(
             ),
             onDismiss = { showThemeSheet = false }
         )
+    }
+
+    refreshTargetConfigId?.let { configId ->
+        val config = uiState.smbConfigs.firstOrNull { it.id == configId }
+        if (config != null) {
+            SmbRefreshOptionsSheet(
+                config = config,
+                onDismiss = { refreshTargetConfigId = null },
+                onQuickScan = {
+                    viewModel.refreshSmbLibrary(config.id, quickScan = true)
+                    refreshTargetConfigId = null
+                },
+                onFullScan = {
+                    viewModel.refreshSmbLibrary(config.id, quickScan = false)
+                    refreshTargetConfigId = null
+                }
+            )
+        } else {
+            refreshTargetConfigId = null
+        }
     }
 
     editorConfig?.let { config ->
@@ -300,6 +329,53 @@ private fun SettingsOptionsSheet(
             }
         }
     }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SmbRefreshOptionsSheet(
+    config: SmbConfig,
+    onDismiss: () -> Unit,
+    onQuickScan: () -> Unit,
+    onFullScan: () -> Unit
+) {
+    AeroModalSheet(onDismissRequest = onDismiss) {
+        AeroSheetScaffold(
+            title = "${config.displayName.ifBlank { "SMB" }} を更新",
+            onDismiss = onDismiss
+        ) {
+            SettingsRefreshOptionRow(
+                title = "クイックスキャン",
+                description = "変更された曲を優先して確認します。",
+                icon = Icons.Default.Bolt,
+                onClick = onQuickScan
+            )
+            SettingsRefreshOptionRow(
+                title = "フルスキャン",
+                description = "ライブラリ全体を最初から再確認します。",
+                icon = Icons.Default.Refresh,
+                onClick = onFullScan
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsRefreshOptionRow(
+    title: String,
+    description: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    ListItem(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp),
+        headlineContent = { Text(title) },
+        supportingContent = { Text(description) },
+        leadingContent = { Icon(icon, contentDescription = null) }
+    )
 }
 
 @Composable

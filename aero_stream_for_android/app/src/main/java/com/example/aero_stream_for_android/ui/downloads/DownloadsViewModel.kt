@@ -64,4 +64,11 @@ class DownloadsViewModel @Inject constructor(
             downloadRepository.startDownload(download.songId, download.smbPath, selectedConfig.id)
         }
     }
+
+    fun removeSongFromCache(song: Song) {
+        viewModelScope.launch {
+            val smbPath = song.smbPath ?: return@launch
+            downloadRepository.deleteBySmbPath(smbPath)
+        }
+    }
 }

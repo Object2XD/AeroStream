@@ -11,6 +11,8 @@ import com.example.aero_stream_for_android.ui.library.content.SmbLibraryContent
 fun LibraryRouteScreen(
     featureState: LibraryFeatureState,
     onNavigateToPlayer: () -> Unit = {},
+    smbScanSheetRequestToken: Int = 0,
+    smbScanCancelRequestToken: Int = 0,
     onNavigateToAlbumDetail: (Album, MusicSource?, String?) -> Unit = { _, _, _ -> }
 ) {
     when (featureState.source) {
@@ -26,6 +28,8 @@ fun LibraryRouteScreen(
             SmbLibraryContent(
                 featureState = featureState,
                 onNavigateToPlayer = onNavigateToPlayer,
+                openScanOptionsRequestToken = smbScanSheetRequestToken,
+                cancelScanRequestToken = smbScanCancelRequestToken,
                 onNavigateToAlbumDetail = onNavigateToAlbumDetail
             )
         }

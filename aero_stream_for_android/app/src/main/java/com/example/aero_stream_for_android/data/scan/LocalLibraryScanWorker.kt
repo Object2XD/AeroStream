@@ -1,15 +1,10 @@
-package com.example.aero_stream_for_android.data.smb
+package com.example.aero_stream_for_android.data.scan
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.aero_stream_for_android.data.repository.SettingsRepository
-import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
-import com.example.aero_stream_for_android.data.scan.LibraryScanEta
-import com.example.aero_stream_for_android.data.scan.LibraryScanEtaEstimator
-import com.example.aero_stream_for_android.data.scan.LibraryScanProgress
-import com.example.aero_stream_for_android.data.scan.LibraryScanSupervisor
+import androidx.work.workDataOf
 import com.example.aero_stream_for_android.data.scan.LibraryScanWorkSupport.KEY_QUICK_SCAN
 import com.example.aero_stream_for_android.data.scan.LibraryScanWorkSupport.KEY_SOURCE_CONFIG_ID
 import com.example.aero_stream_for_android.data.scan.LibraryScanWorkSupport.buildProgressMessage
@@ -21,38 +16,38 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
 @HiltWorker
-class SmbLibraryScanWorker @AssistedInject constructor(
+class LocalLibraryScanWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val settingsRepository: SettingsRepository,
-    private val smbLibraryRepository: SmbLibraryRepository,
+    private val orchestrator: LibraryScanOrchestrator,
+    private val localScanSourceAdapter: LocalScanSourceAdapter,
     private val scanSupervisor: LibraryScanSupervisor
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        val smbConfigId = inputData.getString(KEY_SOURCE_CONFIG_ID) ?: return Result.failure()
-        val quickScan = inputData.getBoolean(KEY_QUICK_SCAN, true)
-        val config = settingsRepository.getSmbConfigById(smbConfigId) ?: return Result.failure()
+        val sourceConfigId = inputData.getString(KEY_SOURCE_CONFIG_ID)
+            ?: LocalScanSourceAdapter.STATUS_CONFIG_ID
         val scanStartedAtMs = System.currentTimeMillis()
 
         scanSupervisor.register(
-            source = MusicSource.SMB,
-            sourceConfigId = smbConfigId,
-            displayName = config.displayName,
+            source = MusicSource.LOCAL,
+            sourceConfigId = sourceConfigId,
+            displayName = "このデバイス",
             progress = LibraryScanProgress(
                 isRunning = true,
-                stage = SmbScanStage.CONNECTING,
-                sourceConfigId = smbConfigId
+                stage = LibraryScanStage.CONNECTING,
+                sourceConfigId = sourceConfigId
             )
         )
-        setProgress(initialProgressData(MusicSource.SMB, smbConfigId, SmbScanStage.CONNECTING))
+        setProgress(initialProgressData(MusicSource.LOCAL, sourceConfigId, LibraryScanStage.CONNECTING))
 
         val result = try {
-            smbLibraryRepository.refreshLibrary(
-                config = config,
-                quickScan = quickScan,
+            orchestrator.refresh(
+                config = Unit,
+                adapter = localScanSourceAdapter,
+                quickScan = inputData.getBoolean(KEY_QUICK_SCAN, false),
                 isCancelled = { isStopped },
                 onProgress = { event ->
-                    if (isStopped) return@refreshLibrary
+                    if (isStopped) return@refresh
                     val eta = if (event.discoveryCompleted) {
                         LibraryScanEtaEstimator.estimate(
                             stage = event.stage,
@@ -61,17 +56,14 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                             elapsedMillis = System.currentTimeMillis() - scanStartedAtMs
                         )
                     } else {
-                        LibraryScanEta(
-                            progressPercent = null,
-                            estimatedRemainingSec = null
-                        )
+                        LibraryScanEta(progressPercent = null, estimatedRemainingSec = null)
                     }
                     val elapsedSec = ((System.currentTimeMillis() - scanStartedAtMs) / 1000L).coerceAtLeast(0L)
                     val message = buildProgressMessage(event)
                     setProgressAsync(
                         progressData(
-                            source = MusicSource.SMB,
-                            sourceConfigId = smbConfigId,
+                            source = MusicSource.LOCAL,
+                            sourceConfigId = sourceConfigId,
                             event = event,
                             elapsedSec = elapsedSec,
                             eta = eta,
@@ -79,9 +71,9 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                         )
                     )
                     scanSupervisor.update(
-                        source = MusicSource.SMB,
-                        sourceConfigId = smbConfigId,
-                        displayName = config.displayName,
+                        source = MusicSource.LOCAL,
+                        sourceConfigId = sourceConfigId,
+                        displayName = "このデバイス",
                         progress = LibraryScanProgress(
                             isRunning = true,
                             stage = event.stage,
@@ -96,21 +88,21 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                             progressPercent = eta.progressPercent,
                             estimatedRemainingSec = eta.estimatedRemainingSec,
                             message = message,
-                            sourceConfigId = smbConfigId
+                            sourceConfigId = sourceConfigId
                         )
                     )
                 }
             )
         } finally {
-            scanSupervisor.complete(MusicSource.SMB, smbConfigId)
+            scanSupervisor.complete(MusicSource.LOCAL, sourceConfigId)
         }
 
         if (isStopped) {
             return Result.failure(
                 terminalResultData(
-                    source = MusicSource.SMB,
-                    sourceConfigId = smbConfigId,
-                    stage = SmbScanStage.CANCELLED,
+                    source = MusicSource.LOCAL,
+                    sourceConfigId = sourceConfigId,
+                    stage = LibraryScanStage.CANCELLED,
                     elapsedSec = 0L,
                     processedCount = 0,
                     scannedCount = 0,
@@ -120,7 +112,7 @@ class SmbLibraryScanWorker @AssistedInject constructor(
                     discoveryCompleted = false,
                     progressPercent = null,
                     estimatedRemainingSec = null,
-                    message = SmbScanStage.CANCELLED.label
+                    message = LibraryScanStage.CANCELLED.label
                 )
             )
         }
@@ -129,9 +121,9 @@ class SmbLibraryScanWorker @AssistedInject constructor(
         return if (result.success) {
             Result.success(
                 terminalResultData(
-                    source = MusicSource.SMB,
-                    sourceConfigId = smbConfigId,
-                    stage = SmbScanStage.COMPLETED,
+                    source = MusicSource.LOCAL,
+                    sourceConfigId = sourceConfigId,
+                    stage = LibraryScanStage.COMPLETED,
                     elapsedSec = elapsedSec,
                     processedCount = result.stagedCount,
                     scannedCount = result.scannedCount,
@@ -147,9 +139,9 @@ class SmbLibraryScanWorker @AssistedInject constructor(
         } else {
             Result.failure(
                 terminalResultData(
-                    source = MusicSource.SMB,
-                    sourceConfigId = smbConfigId,
-                    stage = SmbScanStage.FAILED,
+                    source = MusicSource.LOCAL,
+                    sourceConfigId = sourceConfigId,
+                    stage = LibraryScanStage.FAILED,
                     elapsedSec = elapsedSec,
                     processedCount = result.stagedCount,
                     scannedCount = result.scannedCount,

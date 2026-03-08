@@ -20,7 +20,12 @@ class DownloadRepository @Inject constructor(
     suspend fun startDownload(songId: Long, smbPath: String, smbConfigId: String): Long =
         downloadManager.startDownload(songId, smbPath, smbConfigId)
 
+    suspend fun hasDownloadEntry(smbPath: String): Boolean =
+        downloadManager.hasDownloadEntry(smbPath)
+
     suspend fun cancelDownload(downloadId: Long) = downloadManager.cancelDownload(downloadId)
 
     suspend fun deleteDownload(downloadId: Long) = downloadManager.deleteDownload(downloadId)
+
+    suspend fun deleteBySmbPath(smbPath: String) = downloadManager.deleteDownloadBySmbPath(smbPath)
 }

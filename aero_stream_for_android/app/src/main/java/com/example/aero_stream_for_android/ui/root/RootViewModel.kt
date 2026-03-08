@@ -1,6 +1,9 @@
 package com.example.aero_stream_for_android.ui.root
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.repository.SettingsRepository
+import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
 import com.example.aero_stream_for_android.ui.library.LibraryCategory
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.library.LibrarySort
@@ -10,10 +13,13 @@ import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class RootUiState(
     val currentRoute: String? = Screen.Home.route,
@@ -25,14 +31,55 @@ data class RootUiState(
         title = "Top",
         actions = listOf(HeaderAction.Search, HeaderAction.Settings)
     ),
-    val quickReturnHeaderState: QuickReturnHeaderState = QuickReturnHeaderState()
+    val quickReturnHeaderState: QuickReturnHeaderState = QuickReturnHeaderState(),
+    val selectedSmbConfigId: String? = null,
+    val isSmbScanRunning: Boolean = false
 )
 
 @HiltViewModel
-class RootViewModel @Inject constructor() : ViewModel() {
+class RootViewModel @Inject constructor(
+    private val settingsRepository: SettingsRepository,
+    private val smbLibraryRepository: SmbLibraryRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RootUiState())
     val uiState: StateFlow<RootUiState> = _uiState.asStateFlow()
+    private var smbScanProgressJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.selectedSmbConfig.collectLatest { config ->
+                smbScanProgressJob?.cancel()
+                _uiState.update { state ->
+                    state.copy(
+                        selectedSmbConfigId = config?.id,
+                        isSmbScanRunning = false,
+                        headerSpec = buildHeaderSpec(
+                            route = state.currentRoute,
+                            featureState = state.libraryFeatureState,
+                            isSmbScanRunning = false
+                        )
+                    )
+                }
+
+                val configId = config?.id ?: return@collectLatest
+                smbScanProgressJob = launch {
+                    smbLibraryRepository.observeScanProgress(configId).collect { progress ->
+                        _uiState.update { state ->
+                            state.copy(
+                                isSmbScanRunning = progress.isRunning,
+                                headerSpec = buildHeaderSpec(
+                                    route = state.currentRoute,
+                                    featureState = state.libraryFeatureState,
+                                    isSmbScanRunning = progress.isRunning
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     fun onRouteChanged(route: String?) {
         _uiState.update { state ->
@@ -43,7 +90,7 @@ class RootViewModel @Inject constructor() : ViewModel() {
                     visible = appRoute.isBottomNavVisible(),
                     selected = appRoute.toBottomNavSelectedPrimaryRoute()
                 ),
-                headerSpec = buildHeaderSpec(route, state.libraryFeatureState),
+                headerSpec = buildHeaderSpec(route, state.libraryFeatureState, state.isSmbScanRunning),
                 quickReturnHeaderState = if (route == Screen.Home.route || route == Screen.Library.route) {
                     state.quickReturnHeaderState.clampOffset()
                 } else {
@@ -78,7 +125,7 @@ class RootViewModel @Inject constructor() : ViewModel() {
             state.copy(
                 libraryFeatureState = nextFeatureState,
                 activeOverlay = NoOverlay,
-                headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState)
+                headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState, state.isSmbScanRunning)
             )
         }
     }
@@ -91,7 +138,7 @@ class RootViewModel @Inject constructor() : ViewModel() {
             val nextFeatureState = state.libraryFeatureState.copy(category = category, sort = nextSort)
             state.copy(
                 libraryFeatureState = nextFeatureState,
-                headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState)
+                headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState, state.isSmbScanRunning)
             )
         }
     }
@@ -102,7 +149,7 @@ class RootViewModel @Inject constructor() : ViewModel() {
             state.copy(
                 libraryFeatureState = nextFeatureState,
                 activeOverlay = NoOverlay,
-                headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState)
+                headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState, state.isSmbScanRunning)
             )
         }
     }
@@ -136,7 +183,11 @@ class RootViewModel @Inject constructor() : ViewModel() {
         return availableSortKeys(featureState.source, featureState.category)
     }
 
-    private fun buildHeaderSpec(route: String?, featureState: LibraryFeatureState): HeaderSpec {
+    private fun buildHeaderSpec(
+        route: String?,
+        featureState: LibraryFeatureState,
+        isSmbScanRunning: Boolean
+    ): HeaderSpec {
         return when (route) {
             Screen.Home.route -> HeaderSpec(
                 enabled = true,
@@ -147,7 +198,13 @@ class RootViewModel @Inject constructor() : ViewModel() {
             Screen.Library.route -> HeaderSpec(
                 enabled = true,
                 title = "Library",
-                actions = listOf(HeaderAction.Search, HeaderAction.Settings),
+                actions = buildList {
+                    add(HeaderAction.Search)
+                    if (featureState.source == LibrarySource.SMB) {
+                        add(if (isSmbScanRunning) HeaderAction.CancelSmbScan else HeaderAction.SmbScan)
+                    }
+                    add(HeaderAction.Settings)
+                },
                 accessory = LibraryAccessorySpec(
                     categories = categoriesForSource(featureState.source),
                     selectedCategory = featureState.category,

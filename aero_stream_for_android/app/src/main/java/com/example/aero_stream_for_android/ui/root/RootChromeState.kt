@@ -29,5 +29,7 @@ data class LibraryAccessorySpec(
 
 enum class HeaderAction {
     Search,
+    SmbScan,
+    CancelSmbScan,
     Settings
 }

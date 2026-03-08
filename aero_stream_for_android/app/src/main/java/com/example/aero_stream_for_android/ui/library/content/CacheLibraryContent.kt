@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Pause
@@ -29,8 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
-import com.example.aero_stream_for_android.ui.components.SongListItem
-import com.example.aero_stream_for_android.ui.components.SongListItemStyle
+import com.example.aero_stream_for_android.domain.model.SongCacheStatus
+import com.example.aero_stream_for_android.domain.model.cacheStatus
 import com.example.aero_stream_for_android.ui.downloads.DownloadsViewModel
 import com.example.aero_stream_for_android.ui.library.LibraryFeatureState
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
@@ -123,14 +124,27 @@ fun CacheLibraryContent(
                 )
             }
             items(downloadedSongs) { song ->
-                SongListItem(
+                LibrarySongRow(
                     song = song,
                     onClick = {
                         playerViewModel.playQueue(downloadedSongs, downloadedSongs.indexOf(song))
                         onNavigateToPlayer()
                     },
+                    menuItems = if (song.cacheStatus == SongCacheStatus.CACHED) {
+                        listOf(
+                            LibraryRowMenuItem(
+                                id = "cache_remove_${song.id}",
+                                label = "キャッシュから削除",
+                                isDestructive = true,
+                                leadingIcon = Icons.Default.Delete,
+                                onClick = { downloadsViewModel.removeSongFromCache(song) }
+                            )
+                        )
+                    } else {
+                        emptyList()
+                    },
                     isPlaying = playerState.currentSong?.id == song.id && playerState.isPlaying,
-                    style = SongListItemStyle.WithStatusBadge
+                    style = LibrarySongRowStyle.WithStatusBadge
                 )
             }
         }

@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -56,6 +57,8 @@ fun RootShell(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var showFullPlayer by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    var smbScanSheetRequestToken by rememberSaveable { mutableIntStateOf(0) }
+    var smbScanCancelRequestToken by rememberSaveable { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val bottomNavItems = remember {
         listOf(Screen.Home, Screen.Library)
@@ -84,6 +87,8 @@ fun RootShell(
     fun handleHeaderAction(action: HeaderAction) {
         when (action) {
             HeaderAction.Search -> navController.navigate(Screen.Search.route)
+            HeaderAction.SmbScan -> smbScanSheetRequestToken += 1
+            HeaderAction.CancelSmbScan -> smbScanCancelRequestToken += 1
             HeaderAction.Settings -> navController.navigate(Screen.Settings.route)
         }
     }
@@ -204,7 +209,9 @@ fun RootShell(
                         libraryFeatureState = rootState.libraryFeatureState,
                         onNavigateToPlayer = { showFullPlayer = true },
                         onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                        onNavigateBackFromSearch = { navController.popBackStack() }
+                        onNavigateBackFromSearch = { navController.popBackStack() },
+                        smbScanSheetRequestToken = smbScanSheetRequestToken,
+                        smbScanCancelRequestToken = smbScanCancelRequestToken
                     )
                 }
 

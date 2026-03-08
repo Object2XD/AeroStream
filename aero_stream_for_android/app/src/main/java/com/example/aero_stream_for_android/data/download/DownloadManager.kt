@@ -106,6 +106,24 @@ class DownloadManager @Inject constructor(
     }
 
     /**
+     * SMBパスをキーにキャッシュを削除する。
+     * ダウンロード履歴が無い場合も songs テーブルのキャッシュ状態を直接クリアする。
+     */
+    suspend fun deleteDownloadBySmbPath(smbPath: String) {
+        val existing = downloadDao.getDownloadBySmbPath(smbPath)
+        if (existing != null) {
+            deleteDownload(existing.id)
+            return
+        }
+
+        songDao.getSongBySmbPath(smbPath)?.localPath?.let { path ->
+            File(path).delete()
+        }
+        songDao.clearCacheBySmbPath(smbPath)
+        downloadDao.deleteBySmbPath(smbPath)
+    }
+
+    /**
      * 全ダウンロードを監視する。
      */
     fun observeAllDownloads(): Flow<List<DownloadEntity>> = downloadDao.getAllDownloads()

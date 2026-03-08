@@ -1,21 +1,55 @@
 package com.example.aero_stream_for_android.ui.root
 
+import com.example.aero_stream_for_android.data.repository.SettingsRepository
+import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
 import com.example.aero_stream_for_android.ui.library.LibraryCategory
 import com.example.aero_stream_for_android.ui.library.LibrarySort
 import com.example.aero_stream_for_android.ui.library.LibrarySortKey
 import com.example.aero_stream_for_android.ui.library.LibrarySource
 import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.navigation.Screen
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RootViewModelTest {
+
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    private fun createViewModel(): RootViewModel {
+        val settingsRepository = mockk<SettingsRepository>()
+        val smbLibraryRepository = mockk<SmbLibraryRepository>()
+        every { settingsRepository.selectedSmbConfig } returns flowOf(null)
+        every { smbLibraryRepository.observeScanProgress(any()) } returns emptyFlow()
+        return RootViewModel(settingsRepository, smbLibraryRepository)
+    }
 
     @Test
     fun onRouteChanged_home_updatesHeaderAndBottomNavForTop() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         viewModel.onRouteChanged(Screen.Home.route)
 
@@ -34,7 +68,7 @@ class RootViewModelTest {
 
     @Test
     fun onRouteChanged_library_updatesHeaderAndAccessoryForLibrary() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         viewModel.onRouteChanged(Screen.Library.route)
 
@@ -66,7 +100,7 @@ class RootViewModelTest {
 
     @Test
     fun onRouteChanged_settings_disablesHeaderAndHidesBottomNav() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         viewModel.onRouteChanged(Screen.Settings.route)
 
@@ -81,7 +115,7 @@ class RootViewModelTest {
 
     @Test
     fun onRouteChanged_albumDetail_keepsLibraryBottomNavSelectionAndDisablesHeader() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         viewModel.onRouteChanged("album_detail?albumName=Album&albumArtist=Artist&source=SMB&smbConfigId=cfg&year=2024")
 
@@ -94,7 +128,7 @@ class RootViewModelTest {
 
     @Test
     fun onRouteChanged_smbBrowser_keepsLibraryBottomNavSelectionAndDisablesHeader() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         viewModel.onRouteChanged("smb_browser?configId=cfg")
 
@@ -107,7 +141,7 @@ class RootViewModelTest {
 
     @Test
     fun setLibrarySource_cache_correctsCategoryAndSortAndClosesOverlay() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.onRouteChanged(Screen.Library.route)
         viewModel.setLibraryCategory(LibraryCategory.Playlists)
         viewModel.openOverlay(LibrarySourcePickerOverlay)
@@ -128,7 +162,7 @@ class RootViewModelTest {
 
     @Test
     fun setLibrarySource_smb_correctsPlaylistsCategoryToSongs() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.onRouteChanged(Screen.Library.route)
         viewModel.setLibraryCategory(LibraryCategory.Playlists)
 
@@ -142,7 +176,7 @@ class RootViewModelTest {
 
     @Test
     fun setLibraryCategory_playlists_resetsSortToCreatedAtDesc() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.onRouteChanged(Screen.Library.route)
         viewModel.setLibrarySort(LibrarySort(LibrarySortKey.Artist, SortOrder.Asc))
 
@@ -158,7 +192,7 @@ class RootViewModelTest {
 
     @Test
     fun setLibraryCategory_albums_resetsInvalidSortToNameAsc() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.onRouteChanged(Screen.Library.route)
         viewModel.setLibrarySort(LibrarySort(LibrarySortKey.AddedDate, SortOrder.Desc))
 
@@ -171,7 +205,7 @@ class RootViewModelTest {
 
     @Test
     fun setLibrarySort_updatesSortAndClosesOverlay() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.onRouteChanged(Screen.Library.route)
         viewModel.openOverlay(LibrarySortPickerOverlay)
 
@@ -190,7 +224,7 @@ class RootViewModelTest {
 
     @Test
     fun openOverlay_sameOverlayTwice_keepsExistingOverlay() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         viewModel.openOverlay(LibrarySourcePickerOverlay)
         viewModel.openOverlay(LibrarySourcePickerOverlay)
@@ -200,7 +234,7 @@ class RootViewModelTest {
 
     @Test
     fun closeOverlay_resetsToNoOverlay() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.openOverlay(LibrarySortPickerOverlay)
 
         viewModel.closeOverlay()
@@ -210,7 +244,7 @@ class RootViewModelTest {
 
     @Test
     fun availableSortKeys_returnsSourceAndCategorySpecificValues() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         assertEquals(
             listOf(
@@ -247,7 +281,7 @@ class RootViewModelTest {
 
     @Test
     fun headerStateMutators_updateQuickReturnHeaderState() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
 
         viewModel.updateHeaderHeight(100)
         viewModel.applyHeaderDelta(-30f)
@@ -261,7 +295,7 @@ class RootViewModelTest {
 
     @Test
     fun onRouteChanged_nonHomeOrLibrary_resetsQuickReturnHeaderState() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.updateHeaderHeight(120)
         viewModel.applyHeaderDelta(-40f)
 
@@ -273,7 +307,7 @@ class RootViewModelTest {
 
     @Test
     fun onRouteChanged_betweenHomeAndLibrary_clampsAndKeepsQuickReturnHeaderState() {
-        val viewModel = RootViewModel()
+        val viewModel = createViewModel()
         viewModel.updateHeaderHeight(100)
         viewModel.applyHeaderDelta(-150f)
 

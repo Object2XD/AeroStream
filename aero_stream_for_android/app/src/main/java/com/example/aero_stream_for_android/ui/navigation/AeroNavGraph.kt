@@ -24,7 +24,9 @@ fun AeroNavGraph(
     libraryFeatureState: LibraryFeatureState,
     onNavigateToPlayer: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
-    onNavigateBackFromSearch: () -> Unit = {}
+    onNavigateBackFromSearch: () -> Unit = {},
+    smbScanSheetRequestToken: Int = 0,
+    smbScanCancelRequestToken: Int = 0
 ) {
     NavHost(
         navController = navController,
@@ -46,6 +48,8 @@ fun AeroNavGraph(
             LibraryRouteScreen(
                 featureState = libraryFeatureState,
                 onNavigateToPlayer = onNavigateToPlayer,
+                smbScanSheetRequestToken = smbScanSheetRequestToken,
+                smbScanCancelRequestToken = smbScanCancelRequestToken,
                 onNavigateToAlbumDetail = { album, source, smbConfigId ->
                     navController.navigate(
                         Screen.AlbumDetail.createRoute(

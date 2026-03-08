@@ -2,9 +2,11 @@ package com.example.aero_stream_for_android.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.repository.DownloadRepository
 import com.example.aero_stream_for_android.data.repository.MusicRepository
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
@@ -22,7 +24,8 @@ data class SearchUiState(
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val downloadRepository: DownloadRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -75,6 +78,23 @@ class SearchViewModel @Inject constructor(
     fun clearRecentSearches() {
         viewModelScope.launch {
             settingsRepository.clearRecentSearches()
+        }
+    }
+
+    fun addSongToCache(song: Song) {
+        viewModelScope.launch {
+            if (!song.isCacheDownloadEligible) return@launch
+            val smbPath = song.smbPath ?: return@launch
+            val configId = settingsRepository.getSelectedSmbConfig()?.id ?: return@launch
+            if (downloadRepository.hasDownloadEntry(smbPath)) return@launch
+            downloadRepository.startDownload(song.id, smbPath, configId)
+        }
+    }
+
+    fun removeSongFromCache(song: Song) {
+        viewModelScope.launch {
+            val smbPath = song.smbPath ?: return@launch
+            downloadRepository.deleteBySmbPath(smbPath)
         }
     }
 }

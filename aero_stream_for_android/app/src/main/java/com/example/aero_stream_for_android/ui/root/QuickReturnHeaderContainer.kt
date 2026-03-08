@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +53,18 @@ fun QuickReturnHeaderContainer(
                         HeaderAction.Search -> {
                             IconButton(onClick = { onActionClick(action) }) {
                                 Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                        }
+
+                        HeaderAction.SmbScan -> {
+                            IconButton(onClick = { onActionClick(action) }) {
+                                Icon(Icons.Default.CloudSync, contentDescription = "SMB Scan")
+                            }
+                        }
+
+                        HeaderAction.CancelSmbScan -> {
+                            IconButton(onClick = { onActionClick(action) }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel SMB Scan")
                             }
                         }
 

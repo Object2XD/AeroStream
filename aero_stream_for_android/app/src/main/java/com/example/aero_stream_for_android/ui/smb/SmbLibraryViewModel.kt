@@ -2,6 +2,7 @@ package com.example.aero_stream_for_android.ui.smb
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.repository.DownloadRepository
 import com.example.aero_stream_for_android.data.smb.SmbScanProgress
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
@@ -9,6 +10,7 @@ import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.Artist
 import com.example.aero_stream_for_android.domain.model.SmbConfig
 import com.example.aero_stream_for_android.domain.model.Song
+import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -31,13 +33,15 @@ data class SmbLibraryUiState(
     val selectedSourcePathLabel: String = "",
     val lastRefreshTime: Long? = null,
     val hasCachedContent: Boolean = false,
-    val scanProgress: SmbScanProgress = SmbScanProgress()
+    val scanProgress: SmbScanProgress = SmbScanProgress(),
+    val showScanOptionsSheet: Boolean = false
 )
 
 @HiltViewModel
 class SmbLibraryViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val smbLibraryRepository: SmbLibraryRepository
+    private val smbLibraryRepository: SmbLibraryRepository,
+    private val downloadRepository: DownloadRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SmbLibraryUiState())
@@ -78,7 +82,22 @@ class SmbLibraryViewModel @Inject constructor(
         }
     }
 
-    fun fullRefreshLibrary() {
+    fun showScanSheet() {
+        if (_uiState.value.isRefreshing || _uiState.value.selectedSmbConfig == null) return
+        _uiState.update { it.copy(showScanOptionsSheet = true) }
+    }
+
+    fun dismissScanSheet() {
+        _uiState.update { it.copy(showScanOptionsSheet = false) }
+    }
+
+    fun requestQuickScan() {
+        dismissScanSheet()
+        refreshLibrary(quickScan = true)
+    }
+
+    fun requestFullScan() {
+        dismissScanSheet()
         refreshLibrary(quickScan = false)
     }
 
@@ -91,6 +110,57 @@ class SmbLibraryViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun addSongToCache(song: Song) {
+        viewModelScope.launch {
+            if (!song.isCacheDownloadEligible) return@launch
+            val smbPath = song.smbPath ?: return@launch
+            val configId = _uiState.value.selectedSmbConfig?.id ?: return@launch
+            if (downloadRepository.hasDownloadEntry(smbPath)) return@launch
+            downloadRepository.startDownload(song.id, smbPath, configId)
+        }
+    }
+
+    fun removeSongFromCache(song: Song) {
+        viewModelScope.launch {
+            val smbPath = song.smbPath ?: return@launch
+            downloadRepository.deleteBySmbPath(smbPath)
+        }
+    }
+
+    fun addAlbumToCache(album: Album) {
+        viewModelScope.launch {
+            val configId = _uiState.value.selectedSmbConfig?.id ?: return@launch
+            val albumArtist = album.albumArtist.ifBlank { album.artist }
+            val targets = _uiState.value.songs.filter { song ->
+                song.album == album.name &&
+                    song.albumArtist.ifBlank { song.artist } == albumArtist &&
+                    song.isCacheDownloadEligible
+            }
+            targets.forEach { song ->
+                val smbPath = song.smbPath ?: return@forEach
+                if (!downloadRepository.hasDownloadEntry(smbPath)) {
+                    downloadRepository.startDownload(song.id, smbPath, configId)
+                }
+            }
+        }
+    }
+
+    fun removeAlbumFromCache(album: Album) {
+        viewModelScope.launch {
+            val albumArtist = album.albumArtist.ifBlank { album.artist }
+            val targets = _uiState.value.songs.filter { song ->
+                song.album == album.name &&
+                    song.albumArtist.ifBlank { song.artist } == albumArtist &&
+                    song.isCached &&
+                    !song.smbPath.isNullOrBlank()
+            }
+            targets.forEach { song ->
+                val smbPath = song.smbPath ?: return@forEach
+                downloadRepository.deleteBySmbPath(smbPath)
+            }
+        }
     }
 
     private fun bindConfig(config: SmbConfig?) {
@@ -110,7 +180,8 @@ class SmbLibraryViewModel @Inject constructor(
                     selectedSourcePathLabel = "",
                     lastRefreshTime = null,
                     hasCachedContent = false,
-                    scanProgress = SmbScanProgress()
+                    scanProgress = SmbScanProgress(),
+                    showScanOptionsSheet = false
                 )
             }
             return
@@ -128,7 +199,8 @@ class SmbLibraryViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isRefreshing = progress.isRunning,
-                        scanProgress = progress
+                        scanProgress = progress,
+                        showScanOptionsSheet = if (progress.isRunning) false else it.showScanOptionsSheet
                     )
                 }
             }
