@@ -344,12 +344,20 @@ class SmbMediaDataSource @Inject constructor(
                         currentPath = file.path
                     )
                 )
-                when (val result = ScanMetadataResult.Success(toSong(file).copy(smbConfigId = config.id, sourceUpdatedAt = System.currentTimeMillis()))) {
-                    is ScanMetadataResult.Success -> {
-                        accumulator.results.add(result.song.copy(smbLibraryBucket = bucketId))
+                val result = extractSongMetadata(config, file)
+                val song = when (result) {
+                    is ScanMetadataResult.Success -> result.song
+                    is ScanMetadataResult.Fallback -> result.song
+                    ScanMetadataResult.Error -> {
+                        accumulator.failedCount++
+                        toSong(file).copy(
+                            smbConfigId = config.id,
+                            sourceUpdatedAt = System.currentTimeMillis(),
+                            metadataState = SongMetadataState.FALLBACK
+                        )
                     }
-                    else -> {}
                 }
+                accumulator.results.add(song.copy(smbLibraryBucket = bucketId, smbConfigId = config.id))
             }
             listing.directories.forEach { directory ->
                 scanSongsRecursive(config, bucketId, directory.path, accumulator, onProgress)

@@ -28,8 +28,8 @@ internal class SmbConnectionLifecycle {
             .withSoTimeout(30, TimeUnit.SECONDS)
             .build()
 
-        entry.client = SMBClient(smbConfig)
-        entry.connection = entry.client!!.connect(config.hostname, config.port)
+        val client = SMBClient(smbConfig)
+        val connection = client.connect(config.hostname, config.port)
 
         val authContext = if (config.username.isNotBlank()) {
             AuthenticationContext(
@@ -41,8 +41,13 @@ internal class SmbConnectionLifecycle {
             AuthenticationContext.guest()
         }
 
-        entry.session = entry.connection!!.authenticate(authContext)
-        entry.share = entry.session!!.connectShare(config.shareName) as DiskShare
+        val session = connection.authenticate(authContext)
+        val share = session.connectShare(config.shareName) as DiskShare
+
+        entry.client = client
+        entry.connection = connection
+        entry.session = session
+        entry.share = share
         entry.currentConfig = config
     }
 
