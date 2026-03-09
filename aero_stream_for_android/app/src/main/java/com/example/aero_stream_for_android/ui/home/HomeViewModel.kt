@@ -1,17 +1,20 @@
 package com.example.aero_stream_for_android.ui.home
 
+import com.example.aero_stream_for_android.data.download.DownloadStartResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aero_stream_for_android.data.repository.DownloadRepository
 import com.example.aero_stream_for_android.data.repository.MusicRepository
-import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.domain.model.isCacheDownloadEligible
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,12 +29,13 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
-    private val settingsRepository: SettingsRepository,
     private val downloadRepository: DownloadRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(isLoading = true))
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    private val _toastMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val toastMessages: SharedFlow<String> = _toastMessages.asSharedFlow()
     private var homeDataLoaded = false
     private var localScanRunning = false
 
@@ -91,16 +95,29 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             if (!song.isCacheDownloadEligible) return@launch
             val smbPath = song.smbPath ?: return@launch
-            val configId = settingsRepository.getSelectedSmbConfig()?.id ?: return@launch
-            if (downloadRepository.hasDownloadEntry(smbPath)) return@launch
-            downloadRepository.startDownload(song.id, smbPath, configId)
+            when (val result = downloadRepository.startDownload(song.id, smbPath, song.smbConfigId)) {
+                is DownloadStartResult.Started -> {
+                    if (result.retriedFromFailure) {
+                        _toastMessages.tryEmit("前回失敗したダウンロードを再試行しています")
+                    }
+                }
+                is DownloadStartResult.SkippedActive -> {
+                    _toastMessages.tryEmit("この曲はすでにダウンロード中です")
+                }
+                is DownloadStartResult.AlreadyCompleted -> {
+                    _toastMessages.tryEmit("この曲はすでにキャッシュ済みです")
+                }
+                is DownloadStartResult.ConfigResolutionFailed -> {
+                    _toastMessages.tryEmit(result.reason)
+                }
+            }
         }
     }
 
     fun removeSongFromCache(song: Song) {
         viewModelScope.launch {
             val smbPath = song.smbPath ?: return@launch
-            downloadRepository.deleteBySmbPath(smbPath)
+            downloadRepository.deleteBySmbPath(smbPath, song.smbConfigId)
         }
     }
 }

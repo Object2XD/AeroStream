@@ -462,7 +462,7 @@ class SmbMediaDataSource @Inject constructor(
             smbConfigId = null,
             fileSize = fileInfo.size,
             smbLastWriteTime = fileInfo.lastWriteTime,
-            metadataState = SongMetadataState.UNSCANNED,
+            metadataState = SongMetadataState.FALLBACK,
             mimeType = when (fileInfo.extension) {
                 "mp3" -> "audio/mpeg"
                 "m4a", "aac" -> "audio/mp4"

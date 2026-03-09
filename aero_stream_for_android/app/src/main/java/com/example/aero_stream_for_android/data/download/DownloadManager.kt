@@ -9,7 +9,6 @@ import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import java.io.File
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,28 +19,55 @@ import javax.inject.Singleton
 class DownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloadDao: DownloadDao,
-    private val songDao: SongDao
+    private val songDao: SongDao,
+    private val smbConfigResolver: SmbConfigResolver,
+    private val workManager: WorkManager = WorkManager.getInstance(context)
 ) {
     companion object {
         private const val DOWNLOAD_WORK_TAG_PREFIX = "download_"
+        private const val UNIQUE_WORK_PREFIX = "download_work_"
     }
-
-    private val workManager = WorkManager.getInstance(context)
 
     /**
      * SMBファイルのダウンロードを開始する。
      */
-    suspend fun startDownload(songId: Long, smbPath: String, smbConfigId: String): Long {
-        // 既存のダウンロードをチェック
-        val existing = downloadDao.getDownloadBySmbPath(smbPath)
-        if (existing != null && existing.state == DownloadState.COMPLETED) {
-            return existing.id
+    suspend fun startDownload(songId: Long, smbPath: String, smbConfigId: String?): DownloadStartResult {
+        val resolved = when (val resolution = smbConfigResolver.resolveForDownloadStart(songId, smbConfigId)) {
+            is SmbConfigResolutionResult.Resolved -> resolution.config
+            is SmbConfigResolutionResult.Failed -> {
+                return DownloadStartResult.ConfigResolutionFailed(resolution.reason)
+            }
+        }
+
+        // 同一SMB構成内の既存ダウンロードをチェック
+        var existing = downloadDao.getDownloadBySmbPathAndConfigId(smbPath, resolved.id)
+        if (existing == null) {
+            val legacy = downloadDao.getLegacyDownloadBySmbPath(smbPath)
+            if (legacy != null) {
+                val upgraded = legacy.copy(songId = songId, smbConfigId = resolved.id)
+                downloadDao.updateDownload(upgraded)
+                existing = upgraded
+            }
+        }
+        if (existing != null) {
+            when (existing.state) {
+                DownloadState.COMPLETED -> return DownloadStartResult.AlreadyCompleted(existing.id)
+                DownloadState.PENDING, DownloadState.DOWNLOADING -> {
+                    return DownloadStartResult.SkippedActive(existing.id)
+                }
+                DownloadState.FAILED, DownloadState.PAUSED -> {
+                    workManager.cancelAllWorkByTag("$DOWNLOAD_WORK_TAG_PREFIX${existing.id}")
+                    existing.localCachePath?.let { path -> File(path).delete() }
+                    downloadDao.deleteDownload(existing)
+                }
+            }
         }
 
         // ダウンロードエントリを作成
         val download = DownloadEntity(
             songId = songId,
             smbPath = smbPath,
+            smbConfigId = resolved.id,
             state = DownloadState.PENDING
         )
         val downloadId = downloadDao.insertDownload(download)
@@ -53,7 +79,7 @@ class DownloadManager @Inject constructor(
                     DownloadWorker.KEY_DOWNLOAD_ID to downloadId,
                     DownloadWorker.KEY_SMB_PATH to smbPath,
                     DownloadWorker.KEY_SONG_ID to songId,
-                    DownloadWorker.KEY_SMB_CONFIG_ID to smbConfigId
+                    DownloadWorker.KEY_SMB_CONFIG_ID to resolved.id
                 )
             )
             .setConstraints(
@@ -70,19 +96,15 @@ class DownloadManager @Inject constructor(
             .build()
 
         workManager.enqueueUniqueWork(
-            "download_${smbPath}",
+            uniqueWorkName(smbPath = smbPath, smbConfigId = resolved.id),
             ExistingWorkPolicy.KEEP,
             workRequest
         )
 
-        return downloadId
-    }
-
-    /**
-     * 指定SMBパスのダウンロード履歴が存在するか確認する。
-     */
-    suspend fun hasDownloadEntry(smbPath: String): Boolean {
-        return downloadDao.getDownloadBySmbPath(smbPath) != null
+        return DownloadStartResult.Started(
+            downloadId = downloadId,
+            retriedFromFailure = existing?.state == DownloadState.FAILED || existing?.state == DownloadState.PAUSED
+        )
     }
 
     /**
@@ -113,7 +135,12 @@ class DownloadManager @Inject constructor(
             download.localCachePath?.let { path ->
                 File(path).delete()
             }
-            songDao.clearCacheBySmbPath(download.smbPath)
+            val smbConfigId = download.smbConfigId
+            if (!smbConfigId.isNullOrBlank()) {
+                songDao.clearCacheBySmbPathAndConfigId(download.smbPath, smbConfigId)
+            } else {
+                songDao.clearCacheBySmbPath(download.smbPath)
+            }
             downloadDao.deleteDownload(download)
         }
     }
@@ -123,17 +150,38 @@ class DownloadManager @Inject constructor(
      * ダウンロード履歴が無い場合も songs テーブルのキャッシュ状態を直接クリアする。
      */
     suspend fun deleteDownloadBySmbPath(smbPath: String) {
-        val existing = downloadDao.getDownloadBySmbPath(smbPath)
+        deleteDownloadBySmbPath(smbPath, smbConfigId = null)
+    }
+
+    /**
+     * SMBパスとSMB設定IDをキーにキャッシュを削除する。
+     * smbConfigId が null の場合はレガシー互換で SMB パスのみを使用する。
+     */
+    suspend fun deleteDownloadBySmbPath(smbPath: String, smbConfigId: String?) {
+        val existing = if (!smbConfigId.isNullOrBlank()) {
+            downloadDao.getDownloadBySmbPathAndConfigId(smbPath, smbConfigId)
+                ?: downloadDao.getLegacyDownloadBySmbPath(smbPath)
+        } else {
+            downloadDao.getDownloadBySmbPath(smbPath)
+        }
         if (existing != null) {
             deleteDownload(existing.id)
             return
         }
 
-        songDao.getSongBySmbPath(smbPath)?.localPath?.let { path ->
-            File(path).delete()
+        if (!smbConfigId.isNullOrBlank()) {
+            songDao.getSongBySmbPathAndConfigId(smbPath, smbConfigId)?.localPath?.let { path ->
+                File(path).delete()
+            }
+            songDao.clearCacheBySmbPathAndConfigId(smbPath, smbConfigId)
+            downloadDao.deleteBySmbPathAndConfigId(smbPath, smbConfigId)
+        } else {
+            songDao.getSongBySmbPath(smbPath)?.localPath?.let { path ->
+                File(path).delete()
+            }
+            songDao.clearCacheBySmbPath(smbPath)
+            downloadDao.deleteBySmbPath(smbPath)
         }
-        songDao.clearCacheBySmbPath(smbPath)
-        downloadDao.deleteBySmbPath(smbPath)
     }
 
     /**
@@ -151,4 +199,8 @@ class DownloadManager @Inject constructor(
      * 完了済みダウンロード数を監視する。
      */
     fun observeCompletedCount(): Flow<Int> = downloadDao.getCompletedCount()
+
+    private fun uniqueWorkName(smbPath: String, smbConfigId: String): String {
+        return UNIQUE_WORK_PREFIX + smbConfigId + "_" + smbPath.hashCode()
+    }
 }

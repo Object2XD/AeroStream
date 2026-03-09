@@ -25,7 +25,7 @@ import com.example.aero_stream_for_android.data.local.db.entity.SongEntity
         PlaylistSongCrossRef::class,
         DownloadEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AeroDatabase : RoomDatabase() {
@@ -238,6 +238,12 @@ abstract class AeroDatabase : RoomDatabase() {
                     FROM smb_scan_status
                     """
                 )
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE downloads ADD COLUMN smbConfigId TEXT")
             }
         }
     }

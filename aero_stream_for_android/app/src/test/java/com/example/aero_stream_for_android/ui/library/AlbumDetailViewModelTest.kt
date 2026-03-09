@@ -2,12 +2,11 @@ package com.example.aero_stream_for_android.ui.library
 
 import androidx.lifecycle.SavedStateHandle
 import com.example.aero_stream_for_android.data.download.DownloadManager
+import com.example.aero_stream_for_android.data.download.DownloadStartResult
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadEntity
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
 import com.example.aero_stream_for_android.data.repository.MusicRepository
-import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.MusicSource
-import com.example.aero_stream_for_android.domain.model.SmbConfig
 import com.example.aero_stream_for_android.domain.model.Song
 import com.example.aero_stream_for_android.ui.navigation.Screen
 import io.mockk.every
@@ -36,7 +35,6 @@ class AlbumDetailViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val musicRepository: MusicRepository = mockk()
     private val downloadManager: DownloadManager = mockk()
-    private val settingsRepository: SettingsRepository = mockk()
 
     @Before
     fun setUp() {
@@ -82,8 +80,6 @@ class AlbumDetailViewModelTest {
             )
         } returns flowOf(listOf(smbSong1, smbSong2))
         every { downloadManager.observeAllDownloads() } returns flowOf(emptyList())
-        coEvery { settingsRepository.getSmbConfigById(any()) } returns null
-        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -93,7 +89,7 @@ class AlbumDetailViewModelTest {
                 Screen.AlbumDetail.smbConfigIdArg to "cfg"
             )
         )
-        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, savedStateHandle)
         advanceUntilIdle()
 
         assertEquals(listOf(smbSong1, smbSong2), viewModel.uiState.value.songs)
@@ -122,8 +118,6 @@ class AlbumDetailViewModelTest {
             musicRepository.getSongsByAlbumAndSource("Album", "Artist", MusicSource.SMB)
         } returns flowOf(listOf(smbSong))
         every { downloadManager.observeAllDownloads() } returns flowOf(emptyList())
-        coEvery { settingsRepository.getSmbConfigById(any()) } returns null
-        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -133,7 +127,7 @@ class AlbumDetailViewModelTest {
                 Screen.AlbumDetail.smbConfigIdArg to ""
             )
         )
-        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, savedStateHandle)
         advanceUntilIdle()
 
         assertEquals(false, viewModel.uiState.value.isLoading)
@@ -145,7 +139,7 @@ class AlbumDetailViewModelTest {
     }
 
     @Test
-    fun cacheAlbumTracks_smbSource_startsNewAndSkipsExisting() = runTest(dispatcher) {
+    fun cacheAlbumTracks_smbSource_startsNewAndSummarizesStartResult() = runTest(dispatcher) {
         val smbSong1 = Song(
             id = 1L,
             title = "Song1",
@@ -185,14 +179,15 @@ class AlbumDetailViewModelTest {
         } returns flowOf(listOf(smbSong1, smbSong2, smbSong3))
         every { downloadManager.observeAllDownloads() } returns flowOf(emptyList())
 
-        val config = SmbConfig(id = "cfg", hostname = "host", shareName = "share")
-        coEvery { settingsRepository.getSmbConfigById("cfg") } returns config
-        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
 
-        coEvery { downloadManager.hasDownloadEntry("dir\\song1.mp3") } returns false
-        coEvery { downloadManager.hasDownloadEntry("dir\\song2.mp3") } returns true
-        coEvery { downloadManager.hasDownloadEntry("dir\\song3.mp3") } returns false
-        coEvery { downloadManager.startDownload(any(), any(), any()) } returns 10L
+        coEvery { downloadManager.startDownload(any(), any(), any()) } answers {
+            when (invocation.args[1] as String) {
+                "dir\\song1.mp3" -> DownloadStartResult.Started(downloadId = 10L, retriedFromFailure = false)
+                "dir\\song2.mp3" -> DownloadStartResult.SkippedActive(existingDownloadId = 20L)
+                "dir\\song3.mp3" -> DownloadStartResult.Started(downloadId = 11L, retriedFromFailure = true)
+                else -> DownloadStartResult.Started(downloadId = 12L, retriedFromFailure = false)
+            }
+        }
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -202,15 +197,15 @@ class AlbumDetailViewModelTest {
                 Screen.AlbumDetail.smbConfigIdArg to "cfg"
             )
         )
-        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, savedStateHandle)
         advanceUntilIdle()
 
         val message = async { viewModel.toastMessages.first() }
         viewModel.cacheAlbumTracks()
         advanceUntilIdle()
 
-        assertEquals("開始:2 スキップ:1 失敗:0", message.await())
-        coVerify(exactly = 2) { downloadManager.startDownload(any(), any(), "cfg") }
+        assertEquals("開始:2 再試行:1 実行中:1 完了済み:0 設定不明:0 失敗:0", message.await())
+        coVerify(exactly = 3) { downloadManager.startDownload(any(), any(), "cfg") }
     }
 
     @Test
@@ -229,8 +224,6 @@ class AlbumDetailViewModelTest {
             musicRepository.getSongsByAlbumAndSource("Album", "Artist", MusicSource.LOCAL)
         } returns flowOf(listOf(localSong))
         every { downloadManager.observeAllDownloads() } returns flowOf(emptyList())
-        coEvery { settingsRepository.getSmbConfigById(any()) } returns null
-        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -240,7 +233,7 @@ class AlbumDetailViewModelTest {
                 Screen.AlbumDetail.smbConfigIdArg to ""
             )
         )
-        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, savedStateHandle)
         advanceUntilIdle()
 
         viewModel.cacheAlbumTracks()
@@ -290,8 +283,6 @@ class AlbumDetailViewModelTest {
                 )
             )
         )
-        coEvery { settingsRepository.getSmbConfigById(any()) } returns null
-        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -301,7 +292,7 @@ class AlbumDetailViewModelTest {
                 Screen.AlbumDetail.smbConfigIdArg to "cfg"
             )
         )
-        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, savedStateHandle)
         advanceUntilIdle()
 
         val active = viewModel.uiState.value.activeDownloadsBySmbPath
@@ -337,8 +328,6 @@ class AlbumDetailViewModelTest {
             )
         } returns flowOf(listOf(smbSong))
         every { downloadManager.observeAllDownloads() } returns flowOf(emptyList())
-        coEvery { settingsRepository.getSmbConfigById(any()) } returns null
-        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -349,7 +338,7 @@ class AlbumDetailViewModelTest {
             )
         )
 
-        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, savedStateHandle)
         advanceUntilIdle()
 
         verify(exactly = 1) {

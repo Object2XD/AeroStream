@@ -34,6 +34,7 @@ object DatabaseModule {
             .addMigrations(AeroDatabase.MIGRATION_5_6)
             .addMigrations(AeroDatabase.MIGRATION_6_7)
             .addMigrations(AeroDatabase.MIGRATION_7_8)
+            .addMigrations(AeroDatabase.MIGRATION_8_9)
             .build()
     }
 

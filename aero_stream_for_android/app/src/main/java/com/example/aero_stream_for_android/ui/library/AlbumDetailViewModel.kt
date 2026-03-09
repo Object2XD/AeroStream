@@ -4,10 +4,10 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.download.DownloadStartResult
 import com.example.aero_stream_for_android.data.download.DownloadManager
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
 import com.example.aero_stream_for_android.data.repository.MusicRepository
-import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.domain.model.Song
@@ -80,7 +80,6 @@ data class TrackDownloadVisualState(
 class AlbumDetailViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
     private val downloadManager: DownloadManager,
-    private val settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -216,15 +215,6 @@ class AlbumDetailViewModel @Inject constructor(
                 return@launch
             }
 
-            val config = (state.smbConfigId?.let { settingsRepository.getSmbConfigById(it) }
-                ?: settingsRepository.getSelectedSmbConfig())
-                ?.takeIf { it.isConfigured && it.id.isNotBlank() }
-
-            if (config == null) {
-                _toastMessages.tryEmit("SMB設定が見つかりません")
-                return@launch
-            }
-
             val targets = state.pendingSmbSongs
             if (targets.isEmpty()) {
                 _toastMessages.tryEmit("このアルバムはすべてキャッシュ済みです")
@@ -232,24 +222,34 @@ class AlbumDetailViewModel @Inject constructor(
             }
 
             var started = 0
-            var skipped = 0
+            var skippedActive = 0
+            var alreadyCompleted = 0
             var failed = 0
+            var retried = 0
+            var configFailed = 0
 
             for (song in targets) {
                 val smbPath = song.smbPath ?: continue
                 try {
-                    if (downloadManager.hasDownloadEntry(smbPath)) {
-                        skipped++
-                    } else {
-                        downloadManager.startDownload(song.id, smbPath, config.id)
-                        started++
+                    when (val result = downloadManager.startDownload(song.id, smbPath, song.smbConfigId)) {
+                        is DownloadStartResult.Started -> {
+                            started++
+                            if (result.retriedFromFailure) {
+                                retried++
+                            }
+                        }
+                        is DownloadStartResult.SkippedActive -> skippedActive++
+                        is DownloadStartResult.AlreadyCompleted -> alreadyCompleted++
+                        is DownloadStartResult.ConfigResolutionFailed -> configFailed++
                     }
                 } catch (_: Exception) {
                     failed++
                 }
             }
 
-            _toastMessages.tryEmit("開始:${started} スキップ:${skipped} 失敗:${failed}")
+            _toastMessages.tryEmit(
+                "開始:${started} 再試行:${retried} 実行中:${skippedActive} 完了済み:${alreadyCompleted} 設定不明:${configFailed} 失敗:${failed}"
+            )
         }
     }
 

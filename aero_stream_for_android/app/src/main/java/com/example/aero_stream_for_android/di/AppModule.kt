@@ -1,6 +1,7 @@
 package com.example.aero_stream_for_android.di
 
 import android.content.Context
+import androidx.work.WorkManager
 import com.example.aero_stream_for_android.data.local.mediastore.LocalMediaDataSource
 import dagger.Module
 import dagger.Provides
@@ -17,5 +18,11 @@ object AppModule {
     @Singleton
     fun provideLocalMediaDataSource(@ApplicationContext context: Context): LocalMediaDataSource {
         return LocalMediaDataSource(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideWorkManager(@ApplicationContext context: Context): WorkManager {
+        return WorkManager.getInstance(context)
     }
 }

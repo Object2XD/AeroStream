@@ -3,6 +3,7 @@ package com.example.aero_stream_for_android.ui.smb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.download.DownloadStartResult
 import com.example.aero_stream_for_android.data.download.DownloadManager
 import com.example.aero_stream_for_android.data.remote.smb.SmbConnectionManager
 import com.example.aero_stream_for_android.data.remote.smb.SmbDirectoryListing
@@ -12,6 +13,7 @@ import com.example.aero_stream_for_android.data.remote.smb.normalizeSmbRootPath
 import com.example.aero_stream_for_android.data.repository.MusicRepository
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.SmbConfig
+import com.example.aero_stream_for_android.domain.model.SongMetadataState
 import com.example.aero_stream_for_android.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -146,7 +148,8 @@ class SmbBrowserViewModel @Inject constructor(
             try {
                 val song = smbMediaDataSource.toSong(fileInfo).copy(
                     smbConfigId = _uiState.value.smbConfig.id,
-                    sourceUpdatedAt = System.currentTimeMillis()
+                    sourceUpdatedAt = System.currentTimeMillis(),
+                    metadataState = SongMetadataState.FALLBACK
                 )
                 val songId = musicRepository.insertSong(song)
                 val smbConfigId = _uiState.value.smbConfig.id
@@ -154,7 +157,18 @@ class SmbBrowserViewModel @Inject constructor(
                     _uiState.update { it.copy(error = "SMBサーバーが設定されていません") }
                     return@launch
                 }
-                downloadManager.startDownload(songId, fileInfo.path, smbConfigId)
+                when (val result = downloadManager.startDownload(songId, fileInfo.path, smbConfigId)) {
+                    is DownloadStartResult.Started -> Unit
+                    is DownloadStartResult.SkippedActive -> {
+                        _uiState.update { it.copy(error = "この曲はすでにダウンロード中です") }
+                    }
+                    is DownloadStartResult.AlreadyCompleted -> {
+                        _uiState.update { it.copy(error = "この曲はすでにキャッシュ済みです") }
+                    }
+                    is DownloadStartResult.ConfigResolutionFailed -> {
+                        _uiState.update { it.copy(error = result.reason) }
+                    }
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "ダウンロード開始エラー: ${e.message}") }
             }
@@ -165,7 +179,8 @@ class SmbBrowserViewModel @Inject constructor(
         viewModelScope.launch {
             val song = smbMediaDataSource.toSong(fileInfo).copy(
                 smbConfigId = _uiState.value.smbConfig.id,
-                sourceUpdatedAt = System.currentTimeMillis()
+                sourceUpdatedAt = System.currentTimeMillis(),
+                metadataState = SongMetadataState.FALLBACK
             )
             val songId = musicRepository.insertSong(song)
             // PlayerViewModel経由で再生する

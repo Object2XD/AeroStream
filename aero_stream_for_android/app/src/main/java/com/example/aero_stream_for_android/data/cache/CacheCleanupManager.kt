@@ -26,8 +26,14 @@ class CacheCleanupManager @Inject constructor(
             }
             val smbPath = song.smbPath
             if (!smbPath.isNullOrBlank()) {
-                songDao.clearCacheBySmbPath(smbPath)
-                downloadDao.deleteBySmbPath(smbPath)
+                val smbConfigId = song.smbConfigId
+                if (!smbConfigId.isNullOrBlank()) {
+                    songDao.clearCacheBySmbPathAndConfigId(smbPath, smbConfigId)
+                    downloadDao.deleteBySmbPathAndConfigId(smbPath, smbConfigId)
+                } else {
+                    songDao.clearCacheBySmbPath(smbPath)
+                    downloadDao.deleteBySmbPath(smbPath)
+                }
             }
         }
     }

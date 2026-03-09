@@ -16,7 +16,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -31,6 +33,8 @@ import com.example.aero_stream_for_android.ui.library.content.LibrarySongRowStyl
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
 import com.example.aero_stream_for_android.ui.theme.AeroCompactUiTokens
+import kotlinx.coroutines.flow.collectLatest
+import android.widget.Toast
 
 @Composable
 fun HomeScreen(
@@ -41,6 +45,13 @@ fun HomeScreen(
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
+    val context = LocalContext.current
+
+    LaunchedEffect(homeViewModel) {
+        homeViewModel.toastMessages.collectLatest { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     if (uiState.isLoading) {
         Box(

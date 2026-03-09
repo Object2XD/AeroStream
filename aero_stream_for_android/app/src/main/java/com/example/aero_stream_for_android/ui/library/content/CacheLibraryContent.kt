@@ -15,11 +15,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -100,6 +98,13 @@ fun CacheLibraryContent(
                                 .padding(horizontal = 12.dp)
                         ) {
                             Text(text = download.smbPath.substringAfterLast('\\'), maxLines = 1)
+                            if (download.state == DownloadState.FAILED && !download.errorMessage.isNullOrBlank()) {
+                                Text(
+                                    text = download.errorMessage ?: "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                             if (download.fileSize > 0) {
                                 LinearProgressIndicator(
                                     progress = {
@@ -109,11 +114,6 @@ fun CacheLibraryContent(
                                         .fillMaxWidth()
                                         .padding(top = 4.dp)
                                 )
-                            }
-                        }
-                        if (download.state == DownloadState.FAILED) {
-                            IconButton(onClick = { downloadsViewModel.retryDownload(download) }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Retry")
                             }
                         }
                     }

@@ -1,5 +1,6 @@
 package com.example.aero_stream_for_android.ui.search
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,9 +62,15 @@ fun SearchScreen(
     val playerState by playerViewModel.playerState.collectAsState()
     val focusRequester = remember { FocusRequester() }
     val playerSheetBottomClearance = LocalPlayerSheetBottomClearance.current
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+    }
+    LaunchedEffect(uiState.toastMessage) {
+        val message = uiState.toastMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        searchViewModel.consumeToastMessage()
     }
 
     Scaffold(

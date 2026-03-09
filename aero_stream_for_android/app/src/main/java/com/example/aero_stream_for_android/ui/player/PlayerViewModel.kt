@@ -3,11 +3,9 @@ package com.example.aero_stream_for_android.ui.player
 import androidx.lifecycle.ViewModel
 import com.example.aero_stream_for_android.data.download.DownloadManager
 import com.example.aero_stream_for_android.data.repository.MusicRepository
-import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.PlayerState
 import com.example.aero_stream_for_android.domain.model.RepeatMode
 import com.example.aero_stream_for_android.domain.model.Song
-import com.example.aero_stream_for_android.domain.model.SongMetadataState
 import com.example.aero_stream_for_android.player.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -20,20 +18,12 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     private val playerManager: PlayerManager,
     private val musicRepository: MusicRepository,
-    private val downloadManager: DownloadManager,
-    private val settingsRepository: SettingsRepository,
-    private val smbMetadataExtractionQueue: com.example.aero_stream_for_android.data.smb.SmbMetadataExtractionQueue
+    private val downloadManager: DownloadManager
 ) : ViewModel() {
 
     val playerState: StateFlow<PlayerState> = playerManager.playerState
 
     fun playSong(song: Song) {
-        if (song.metadataState == SongMetadataState.UNSCANNED) {
-            CoroutineScope(Dispatchers.IO).launch {
-                val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
-                smbMetadataExtractionQueue.enqueueExtraction(selectedConfig, song)
-            }
-        }
         playerManager.play(song)
         CoroutineScope(Dispatchers.IO).launch {
             musicRepository.updatePlayStats(song.id)
@@ -41,13 +31,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
-        val song = songs.getOrNull(startIndex)
-        if (song != null && song.metadataState == SongMetadataState.UNSCANNED) {
-            CoroutineScope(Dispatchers.IO).launch {
-                val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
-                smbMetadataExtractionQueue.enqueueExtraction(selectedConfig, song)
-            }
-        }
         playerManager.setQueue(songs, startIndex)
     }
 
@@ -77,8 +60,7 @@ class PlayerViewModel @Inject constructor(
         val song = playerState.value.currentSong ?: return
         val smbPath = song.smbPath ?: return
         CoroutineScope(Dispatchers.IO).launch {
-            val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
-            downloadManager.startDownload(song.id, smbPath, selectedConfig.id)
+            downloadManager.startDownload(song.id, smbPath, song.smbConfigId)
         }
     }
 

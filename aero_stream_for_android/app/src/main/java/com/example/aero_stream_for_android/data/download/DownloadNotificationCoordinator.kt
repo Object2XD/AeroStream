@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import androidx.core.app.NotificationCompat
 import androidx.work.ForegroundInfo
 import com.example.aero_stream_for_android.R
@@ -41,7 +42,8 @@ class DownloadNotificationCoordinator @Inject constructor() {
             fileName = fileName,
             downloadedBytes = downloadedBytes,
             fileSize = fileSize
-        )
+        ),
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
     )
 
     internal fun notificationIdForDownload(downloadId: Long): Int {

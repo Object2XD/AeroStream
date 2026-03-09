@@ -15,6 +15,8 @@ data class DownloadEntity(
     val songId: Long,
     /** SMBサーバー上のファイルパス */
     val smbPath: String,
+    /** 複数SMB設定を識別するID */
+    val smbConfigId: String? = null,
     /** ローカルキャッシュパス */
     val localCachePath: String? = null,
     /** ダウンロード状態: PENDING, DOWNLOADING, COMPLETED, FAILED, PAUSED */

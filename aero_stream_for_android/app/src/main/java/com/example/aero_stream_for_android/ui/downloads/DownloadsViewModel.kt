@@ -6,7 +6,6 @@ import com.example.aero_stream_for_android.data.local.db.entity.DownloadEntity
 import com.example.aero_stream_for_android.data.local.db.entity.DownloadState
 import com.example.aero_stream_for_android.data.repository.DownloadRepository
 import com.example.aero_stream_for_android.data.repository.MusicRepository
-import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.domain.model.Song
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -22,8 +21,7 @@ data class DownloadsUiState(
 @HiltViewModel
 class DownloadsViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
-    private val downloadRepository: DownloadRepository,
-    private val settingsRepository: SettingsRepository
+    private val downloadRepository: DownloadRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DownloadsUiState(isLoading = true))
@@ -58,17 +56,10 @@ class DownloadsViewModel @Inject constructor(
         }
     }
 
-    fun retryDownload(download: DownloadEntity) {
-        viewModelScope.launch {
-            val selectedConfig = settingsRepository.getSelectedSmbConfig() ?: return@launch
-            downloadRepository.startDownload(download.songId, download.smbPath, selectedConfig.id)
-        }
-    }
-
     fun removeSongFromCache(song: Song) {
         viewModelScope.launch {
             val smbPath = song.smbPath ?: return@launch
-            downloadRepository.deleteBySmbPath(smbPath)
+            downloadRepository.deleteBySmbPath(smbPath, song.smbConfigId)
         }
     }
 }

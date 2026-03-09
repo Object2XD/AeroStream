@@ -2,6 +2,7 @@ package com.example.aero_stream_for_android.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.download.DownloadStartResult
 import com.example.aero_stream_for_android.data.repository.DownloadRepository
 import com.example.aero_stream_for_android.data.repository.MusicRepository
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
@@ -17,7 +18,8 @@ data class SearchUiState(
     val query: String = "",
     val recentSearches: List<String> = emptyList(),
     val results: List<Song> = emptyList(),
-    val isSearching: Boolean = false
+    val isSearching: Boolean = false,
+    val toastMessage: String? = null
 )
 
 @OptIn(FlowPreview::class)
@@ -85,16 +87,30 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             if (!song.isCacheDownloadEligible) return@launch
             val smbPath = song.smbPath ?: return@launch
-            val configId = settingsRepository.getSelectedSmbConfig()?.id ?: return@launch
-            if (downloadRepository.hasDownloadEntry(smbPath)) return@launch
-            downloadRepository.startDownload(song.id, smbPath, configId)
+            val message = when (val result = downloadRepository.startDownload(song.id, smbPath, song.smbConfigId)) {
+                is DownloadStartResult.Started -> if (result.retriedFromFailure) {
+                    "前回失敗したダウンロードを再試行しています"
+                } else {
+                    null
+                }
+                is DownloadStartResult.SkippedActive -> "この曲はすでにダウンロード中です"
+                is DownloadStartResult.AlreadyCompleted -> "この曲はすでにキャッシュ済みです"
+                is DownloadStartResult.ConfigResolutionFailed -> result.reason
+            }
+            if (message != null) {
+                _uiState.update { it.copy(toastMessage = message) }
+            }
         }
     }
 
     fun removeSongFromCache(song: Song) {
         viewModelScope.launch {
             val smbPath = song.smbPath ?: return@launch
-            downloadRepository.deleteBySmbPath(smbPath)
+            downloadRepository.deleteBySmbPath(smbPath, song.smbConfigId)
         }
+    }
+
+    fun consumeToastMessage() {
+        _uiState.update { it.copy(toastMessage = null) }
     }
 }

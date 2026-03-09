@@ -312,6 +312,23 @@ interface SongDao {
     @Query(
         """
         UPDATE songs
+        SET isCached = 1,
+            cachedAt = :timestamp,
+            localPath = :localPath
+        WHERE smbPath = :smbPath
+          AND smbConfigId = :smbConfigId
+        """
+    )
+    suspend fun markSongCachedBySmbPathAndConfigId(
+        smbPath: String,
+        smbConfigId: String,
+        localPath: String,
+        timestamp: Long
+    ): Int
+
+    @Query(
+        """
+        UPDATE songs
         SET isCached = 0,
             cachedAt = NULL,
             cacheLastPlayedAt = NULL,
@@ -323,7 +340,20 @@ interface SongDao {
 
     @Query(
         """
-        SELECT id, smbPath, localPath, cachedAt, cacheLastPlayedAt
+        UPDATE songs
+        SET isCached = 0,
+            cachedAt = NULL,
+            cacheLastPlayedAt = NULL,
+            localPath = NULL
+        WHERE smbPath = :smbPath
+          AND smbConfigId = :smbConfigId
+        """
+    )
+    suspend fun clearCacheBySmbPathAndConfigId(smbPath: String, smbConfigId: String)
+
+    @Query(
+        """
+        SELECT id, smbPath, smbConfigId, localPath, cachedAt, cacheLastPlayedAt
         FROM songs
         WHERE source = 'SMB'
           AND isCached = 1
@@ -338,6 +368,9 @@ interface SongDao {
 
     @Query("SELECT * FROM songs WHERE smbPath = :path LIMIT 1")
     suspend fun getSongBySmbPath(path: String): SongEntity?
+
+    @Query("SELECT * FROM songs WHERE smbPath = :path AND smbConfigId = :smbConfigId LIMIT 1")
+    suspend fun getSongBySmbPathAndConfigId(path: String, smbConfigId: String): SongEntity?
 
     @Query(
         "SELECT * FROM songs WHERE source = :source AND smbConfigId = :smbConfigId"
@@ -367,6 +400,7 @@ data class ArtistInfo(
 data class CachedSongRecord(
     val id: Long,
     val smbPath: String?,
+    val smbConfigId: String?,
     val localPath: String?,
     val cachedAt: Long?,
     val cacheLastPlayedAt: Long?

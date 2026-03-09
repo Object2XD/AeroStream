@@ -2,6 +2,7 @@ package com.example.aero_stream_for_android.ui.smb
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.download.DownloadStartResult
 import com.example.aero_stream_for_android.data.repository.DownloadRepository
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
@@ -161,16 +162,25 @@ class SmbLibraryViewModel @Inject constructor(
         viewModelScope.launch {
             if (!song.isCacheDownloadEligible) return@launch
             val smbPath = song.smbPath ?: return@launch
-            val configId = song.smbConfigId ?: return@launch
-            if (downloadRepository.hasDownloadEntry(smbPath)) return@launch
-            downloadRepository.startDownload(song.id, smbPath, configId)
+            when (val result = downloadRepository.startDownload(song.id, smbPath, song.smbConfigId)) {
+                is DownloadStartResult.Started -> Unit
+                is DownloadStartResult.SkippedActive -> {
+                    _uiState.update { it.copy(error = "この曲はすでにダウンロード中です") }
+                }
+                is DownloadStartResult.AlreadyCompleted -> {
+                    _uiState.update { it.copy(error = "この曲はすでにキャッシュ済みです") }
+                }
+                is DownloadStartResult.ConfigResolutionFailed -> {
+                    _uiState.update { it.copy(error = result.reason) }
+                }
+            }
         }
     }
 
     fun removeSongFromCache(song: Song) {
         viewModelScope.launch {
             val smbPath = song.smbPath ?: return@launch
-            downloadRepository.deleteBySmbPath(smbPath)
+            downloadRepository.deleteBySmbPath(smbPath, song.smbConfigId)
         }
     }
 
@@ -184,9 +194,13 @@ class SmbLibraryViewModel @Inject constructor(
             }
             targets.forEach { song ->
                 val smbPath = song.smbPath ?: return@forEach
-                val configId = song.smbConfigId ?: return@forEach
-                if (!downloadRepository.hasDownloadEntry(smbPath)) {
-                    downloadRepository.startDownload(song.id, smbPath, configId)
+                when (val result = downloadRepository.startDownload(song.id, smbPath, song.smbConfigId)) {
+                    is DownloadStartResult.Started -> Unit
+                    is DownloadStartResult.SkippedActive -> Unit
+                    is DownloadStartResult.AlreadyCompleted -> Unit
+                    is DownloadStartResult.ConfigResolutionFailed -> {
+                        _uiState.update { it.copy(error = result.reason) }
+                    }
                 }
             }
         }
@@ -203,7 +217,7 @@ class SmbLibraryViewModel @Inject constructor(
             }
             targets.forEach { song ->
                 val smbPath = song.smbPath ?: return@forEach
-                downloadRepository.deleteBySmbPath(smbPath)
+                downloadRepository.deleteBySmbPath(smbPath, song.smbConfigId)
             }
         }
     }

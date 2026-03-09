@@ -19,6 +19,12 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE smbPath = :smbPath LIMIT 1")
     suspend fun getDownloadBySmbPath(smbPath: String): DownloadEntity?
 
+    @Query("SELECT * FROM downloads WHERE smbPath = :smbPath AND smbConfigId = :smbConfigId LIMIT 1")
+    suspend fun getDownloadBySmbPathAndConfigId(smbPath: String, smbConfigId: String): DownloadEntity?
+
+    @Query("SELECT * FROM downloads WHERE smbPath = :smbPath AND smbConfigId IS NULL LIMIT 1")
+    suspend fun getLegacyDownloadBySmbPath(smbPath: String): DownloadEntity?
+
     @Query("SELECT * FROM downloads WHERE id = :id")
     suspend fun getDownloadById(id: Long): DownloadEntity?
 
@@ -36,6 +42,9 @@ interface DownloadDao {
 
     @Query("DELETE FROM downloads WHERE smbPath = :smbPath")
     suspend fun deleteBySmbPath(smbPath: String)
+
+    @Query("DELETE FROM downloads WHERE smbPath = :smbPath AND smbConfigId = :smbConfigId")
+    suspend fun deleteBySmbPathAndConfigId(smbPath: String, smbConfigId: String)
 
     @Query("SELECT id FROM downloads")
     suspend fun getAllDownloadIds(): List<Long>
