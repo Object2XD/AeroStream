@@ -1,7 +1,8 @@
 package com.example.aero_stream_for_android.ui.navigation
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
@@ -32,10 +33,10 @@ fun AeroNavGraph(
         navController = navController,
         startDestination = Screen.Home.route,
         modifier = modifier,
-        enterTransition = { EnterTransition.None },
-        exitTransition = { ExitTransition.None },
-        popEnterTransition = { EnterTransition.None },
-        popExitTransition = { ExitTransition.None }
+        enterTransition = { fadeIn(animationSpec = tween(durationMillis = 0)) },
+        exitTransition = { fadeOut(animationSpec = tween(durationMillis = 0)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 0)) },
+        popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 0)) }
     ) {
         composable(Screen.Home.route) {
             HomeScreen(
