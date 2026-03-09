@@ -40,8 +40,8 @@ interface DownloadDao {
     @Query("SELECT id FROM downloads")
     suspend fun getAllDownloadIds(): List<Long>
 
-    @Query("UPDATE downloads SET state = :state, downloadedBytes = :bytes WHERE id = :id")
-    suspend fun updateProgress(id: Long, state: String, bytes: Long)
+    @Query("UPDATE downloads SET state = :state, downloadedBytes = :bytes, fileSize = :fileSize WHERE id = :id")
+    suspend fun updateProgress(id: Long, state: String, bytes: Long, fileSize: Long)
 
     @Query("UPDATE downloads SET state = :state, completedAt = :completedAt, localCachePath = :localPath WHERE id = :id")
     suspend fun markCompleted(id: Long, state: String = "COMPLETED", completedAt: Long = System.currentTimeMillis(), localPath: String)

@@ -28,6 +28,7 @@ class DownloadWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val downloadDao: DownloadDao,
     private val songDao: SongDao,
+    private val notificationCoordinator: DownloadNotificationCoordinator,
     private val smbConnectionManager: SmbConnectionManager,
     private val preferencesDataStore: UserPreferencesDataStore
 ) : CoroutineWorker(appContext, workerParams) {
@@ -50,7 +51,7 @@ class DownloadWorker @AssistedInject constructor(
 
         try {
             // ダウンロード状態を更新
-            downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, 0)
+            downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, 0, 0)
 
             // SMB設定を取得
             preferencesDataStore.migrateLegacySmbConfigIfNeeded()
@@ -79,6 +80,13 @@ class DownloadWorker @AssistedInject constructor(
             )
 
             val fileSize = smbFile.fileInformation.standardInformation.endOfFile
+            downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, 0, fileSize)
+            updateForegroundNotification(
+                downloadId = downloadId,
+                smbPath = smbPath,
+                downloadedBytes = 0L,
+                fileSize = fileSize
+            )
             var downloadedBytes = 0L
 
             // ファイルをダウンロード
@@ -91,13 +99,19 @@ class DownloadWorker @AssistedInject constructor(
                         downloadedBytes += bytesRead
 
                         // 進捗を更新
-                        downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, downloadedBytes)
+                        downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, downloadedBytes, fileSize)
 
                         // WorkManagerの進捗をセット
                         setProgress(
                             workDataOf(
-                                "progress" to ((downloadedBytes * 100) / fileSize).toInt()
+                                "progress" to progressPercent(downloadedBytes, fileSize)
                             )
+                        )
+                        updateForegroundNotification(
+                            downloadId = downloadId,
+                            smbPath = smbPath,
+                            downloadedBytes = downloadedBytes,
+                            fileSize = fileSize
                         )
                     }
                 }
@@ -138,5 +152,40 @@ class DownloadWorker @AssistedInject constructor(
                 Result.failure()
             }
         }
+    }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val downloadId = inputData.getLong(KEY_DOWNLOAD_ID, -1)
+        val smbPath = inputData.getString(KEY_SMB_PATH).orEmpty()
+        return notificationCoordinator.buildForegroundInfo(
+            context = applicationContext,
+            downloadId = downloadId,
+            fileName = smbPath.substringAfterLast('\\', missingDelimiterValue = smbPath.ifBlank { "unknown" }),
+            downloadedBytes = 0L,
+            fileSize = 0L
+        )
+    }
+
+    private suspend fun updateForegroundNotification(
+        downloadId: Long,
+        smbPath: String,
+        downloadedBytes: Long,
+        fileSize: Long
+    ) {
+        val foregroundInfo = notificationCoordinator.buildForegroundInfo(
+            context = applicationContext,
+            downloadId = downloadId,
+            fileName = smbPath.substringAfterLast('\\', missingDelimiterValue = smbPath),
+            downloadedBytes = downloadedBytes,
+            fileSize = fileSize
+        )
+        runCatching { setForeground(foregroundInfo) }
+    }
+
+    private fun progressPercent(downloadedBytes: Long, fileSize: Long): Int {
+        if (fileSize <= 0L) return 0
+        return ((downloadedBytes.coerceAtLeast(0L) * 100L) / fileSize)
+            .coerceIn(0L, 100L)
+            .toInt()
     }
 }
