@@ -55,3 +55,5 @@ fun AppRoute?.toBottomNavSelectedPrimaryRoute(): RootPrimaryRoute? = when (this)
     LibraryRoute, is AlbumDetailRoute, is ArtistDetailRoute, SmbBrowserRoute -> RootPrimaryRoute.Library
     else -> null
 }
+
+fun AppRoute?.isPlayerSheetVisibleRoute(): Boolean = this != SettingsRoute

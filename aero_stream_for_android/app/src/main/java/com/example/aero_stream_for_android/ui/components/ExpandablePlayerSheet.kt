@@ -260,14 +260,25 @@ fun ExpandablePlayerSheet(
                 Column(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    LinearProgressIndicator(
-                        progress = { progressFraction },
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(PlayerSheetProgressBarHeight),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                            .height(PlayerSheetProgressBarHeight)
+                    ) {
+                        if (collapsedContentProgress > 0.01f) {
+                            LinearProgressIndicator(
+                                progress = { progressFraction },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha = collapsedContentProgress.coerceIn(0f, 1f)
+                                    }
+                                    .testTag("collapsed_progress"),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        }
+                    }
 
                     Box(
                         modifier = Modifier

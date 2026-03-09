@@ -60,7 +60,10 @@ fun RootShell(
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val appRoute = routeToAppRoute(currentRoute)
+    val isPlayerSheetVisibleRoute = appRoute.isPlayerSheetVisibleRoute()
     var playerSheetValue by rememberSaveable { mutableStateOf(ExpandablePlayerSheetValue.Hidden) }
+    var stashedPlayerSheetValue by rememberSaveable { mutableStateOf<ExpandablePlayerSheetValue?>(null) }
     var smbScanSheetRequestToken by rememberSaveable { mutableIntStateOf(0) }
     var smbScanCancelRequestToken by rememberSaveable { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -78,11 +81,15 @@ fun RootShell(
         rootViewModel.onRouteChanged(currentRoute)
     }
 
-    LaunchedEffect(playerState.currentSong?.id) {
-        playerSheetValue = reconcilePlayerSheetValue(
+    LaunchedEffect(playerState.currentSong?.id, isPlayerSheetVisibleRoute) {
+        val resolution = resolvePlayerSheetForRouteVisibility(
             currentValue = playerSheetValue,
-            hasCurrentSong = playerState.currentSong != null
+            stashedValue = stashedPlayerSheetValue,
+            hasCurrentSong = playerState.currentSong != null,
+            isPlayerSheetVisibleRoute = isPlayerSheetVisibleRoute
         )
+        playerSheetValue = resolution.sheetValue
+        stashedPlayerSheetValue = resolution.stashedValue
     }
 
     fun navigateToTopLevel(route: String) {
@@ -104,7 +111,10 @@ fun RootShell(
         }
     }
 
-    BackHandler(enabled = playerSheetValue == ExpandablePlayerSheetValue.Expanded) {
+    BackHandler(
+        enabled = isPlayerSheetVisibleRoute &&
+            playerSheetValue == ExpandablePlayerSheetValue.Expanded
+    ) {
         playerSheetValue = collapsePlayerSheet(playerSheetValue)
     }
 
@@ -119,7 +129,6 @@ fun RootShell(
         } else {
             0.dp
         }
-        val appRoute = routeToAppRoute(currentRoute)
         val edgeBackdropSpec = resolveEdgeBackdropSpec(
             appRoute = appRoute,
             colorScheme = MaterialTheme.colorScheme
@@ -231,7 +240,7 @@ fun RootShell(
                 }
 
                 AnimatedVisibility(
-                    visible = playerState.currentSong != null,
+                    visible = playerState.currentSong != null && isPlayerSheetVisibleRoute,
                     enter = slideInVertically(initialOffsetY = { it }),
                     exit = slideOutVertically(targetOffsetY = { it })
                 ) {
@@ -261,6 +270,46 @@ fun RootShell(
             }
         }
     }
+}
+
+internal data class PlayerSheetRouteResolution(
+    val sheetValue: ExpandablePlayerSheetValue,
+    val stashedValue: ExpandablePlayerSheetValue?
+)
+
+internal fun resolvePlayerSheetForRouteVisibility(
+    currentValue: ExpandablePlayerSheetValue,
+    stashedValue: ExpandablePlayerSheetValue?,
+    hasCurrentSong: Boolean,
+    isPlayerSheetVisibleRoute: Boolean
+): PlayerSheetRouteResolution {
+    if (!isPlayerSheetVisibleRoute) {
+        val nextStash = if (hasCurrentSong) {
+            stashedValue ?: currentValue.takeIf { it != ExpandablePlayerSheetValue.Hidden }
+        } else {
+            null
+        }
+        return PlayerSheetRouteResolution(
+            sheetValue = ExpandablePlayerSheetValue.Hidden,
+            stashedValue = nextStash
+        )
+    }
+
+    if (!hasCurrentSong) {
+        return PlayerSheetRouteResolution(
+            sheetValue = ExpandablePlayerSheetValue.Hidden,
+            stashedValue = null
+        )
+    }
+
+    val baseValue = stashedValue ?: currentValue
+    return PlayerSheetRouteResolution(
+        sheetValue = reconcilePlayerSheetValue(
+            currentValue = baseValue,
+            hasCurrentSong = true
+        ),
+        stashedValue = null
+    )
 }
 
 private data class EdgeBackdropSpec(

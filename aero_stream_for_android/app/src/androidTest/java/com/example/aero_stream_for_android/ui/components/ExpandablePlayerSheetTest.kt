@@ -135,6 +135,29 @@ class ExpandablePlayerSheetTest {
         composeRule.onNodeWithText("ライブラリソース").assertIsDisplayed()
     }
 
+    @Test
+    fun expandedSheet_hidesCollapsedProgressBar() {
+        composeRule.setContent {
+            AeroStreamTheme {
+                ExpandablePlayerSheet(
+                    playerState = samplePlayerState(),
+                    sheetValue = ExpandablePlayerSheetValue.Expanded,
+                    onSheetValueChange = {},
+                    onPlayPause = {},
+                    onSkipNext = {},
+                    onSkipPrevious = {},
+                    onSeek = {},
+                    onRepeatModeChange = {},
+                    onShuffleToggle = {},
+                    bottomBarHeight = AeroCompactUiTokens.bottomNavHeight
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("expanded_player").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("collapsed_progress").assertCountEquals(0)
+    }
+
     @Composable
     private fun PlayerChromeHost(
         sheetValue: ExpandablePlayerSheetValue,
