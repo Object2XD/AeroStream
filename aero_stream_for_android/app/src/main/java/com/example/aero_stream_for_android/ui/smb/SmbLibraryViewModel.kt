@@ -3,9 +3,9 @@ package com.example.aero_stream_for_android.ui.smb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aero_stream_for_android.data.repository.DownloadRepository
-import com.example.aero_stream_for_android.data.smb.SmbScanProgress
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
+import com.example.aero_stream_for_android.data.smb.SmbScanProgress
 import com.example.aero_stream_for_android.domain.model.Album
 import com.example.aero_stream_for_android.domain.model.Artist
 import com.example.aero_stream_for_android.domain.model.SmbConfig
@@ -20,21 +20,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+enum class ScanTargetSheetMode {
+    Refresh,
+    Cancel
+}
+
 data class SmbLibraryUiState(
     val selectedTab: Int = 0,
     val songs: List<Song> = emptyList(),
     val albums: List<Album> = emptyList(),
     val artists: List<Artist> = emptyList(),
+    val smbConfigs: List<SmbConfig> = emptyList(),
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val error: String? = null,
-    val selectedSmbConfig: SmbConfig? = null,
-    val selectedSourceLabel: String = "",
-    val selectedSourcePathLabel: String = "",
     val lastRefreshTime: Long? = null,
     val hasCachedContent: Boolean = false,
-    val scanProgress: SmbScanProgress = SmbScanProgress(),
-    val showScanOptionsSheet: Boolean = false
+    val scanProgressByConfig: Map<String, SmbScanProgress> = emptyMap(),
+    val showScanTargetSheet: Boolean = false,
+    val scanTargetSheetMode: ScanTargetSheetMode? = null
 )
 
 @HiltViewModel
@@ -56,17 +60,43 @@ class SmbLibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.migrateLegacySmbConfigIfNeeded()
-            settingsRepository.selectedSmbConfig.collect { config ->
-                _uiState.update {
-                    it.copy(
-                        selectedSmbConfig = config,
-                        selectedSourceLabel = config?.displayName.orEmpty(),
-                        selectedSourcePathLabel = config?.let(::buildSourcePathLabel).orEmpty(),
+        }
+
+        viewModelScope.launch {
+            settingsRepository.smbConfigs.collect { configs ->
+                _uiState.update { state ->
+                    state.copy(
+                        smbConfigs = configs,
                         isLoading = false,
-                        error = if (config == null) "SMBサーバーが設定されていません" else null
+                        error = if (configs.isEmpty()) "SMBサーバーが設定されていません" else null,
+                        showScanTargetSheet = if (configs.isEmpty()) false else state.showScanTargetSheet,
+                        scanTargetSheetMode = if (configs.isEmpty()) null else state.scanTargetSheetMode
                     )
                 }
-                bindConfig(config)
+            }
+        }
+
+        bindLibraryContent()
+
+        refreshTimeJob = viewModelScope.launch {
+            smbLibraryRepository.getLastRefreshTime().collect { timestamp ->
+                _uiState.update { it.copy(lastRefreshTime = timestamp) }
+            }
+        }
+        scanProgressJob = viewModelScope.launch {
+            smbLibraryRepository.observeAllScanProgress().collect { progressByConfig ->
+                val isRunning = progressByConfig.values.any { progress -> progress.isRunning }
+                _uiState.update { state ->
+                    state.copy(
+                        isRefreshing = isRunning,
+                        scanProgressByConfig = progressByConfig,
+                        showScanTargetSheet = if (isRunning && state.scanTargetSheetMode == ScanTargetSheetMode.Refresh) {
+                            false
+                        } else {
+                            state.showScanTargetSheet
+                        }
+                    )
+                }
             }
         }
     }
@@ -75,36 +105,51 @@ class SmbLibraryViewModel @Inject constructor(
         _uiState.update { it.copy(selectedTab = index) }
     }
 
-    fun refreshLibrary(quickScan: Boolean = true) {
-        val config = _uiState.value.selectedSmbConfig ?: return
-        viewModelScope.launch {
-            smbLibraryRepository.enqueueScan(config.id, quickScan)
+    fun showRefreshTargetSheet() {
+        val state = _uiState.value
+        if (state.smbConfigs.isEmpty() || state.isRefreshing) return
+        _uiState.update {
+            it.copy(
+                showScanTargetSheet = true,
+                scanTargetSheetMode = ScanTargetSheetMode.Refresh
+            )
         }
     }
 
-    fun showScanSheet() {
-        if (_uiState.value.isRefreshing || _uiState.value.selectedSmbConfig == null) return
-        _uiState.update { it.copy(showScanOptionsSheet = true) }
+    fun showCancelTargetSheet() {
+        val runningConfigIds = runningConfigIds()
+        if (runningConfigIds.isEmpty()) return
+        _uiState.update {
+            it.copy(
+                showScanTargetSheet = true,
+                scanTargetSheetMode = ScanTargetSheetMode.Cancel
+            )
+        }
     }
 
     fun dismissScanSheet() {
-        _uiState.update { it.copy(showScanOptionsSheet = false) }
+        _uiState.update {
+            it.copy(
+                showScanTargetSheet = false,
+                scanTargetSheetMode = null
+            )
+        }
     }
 
-    fun requestQuickScan() {
+    fun requestQuickScan(configId: String) {
         dismissScanSheet()
-        refreshLibrary(quickScan = true)
+        refreshLibrary(configId, quickScan = true)
     }
 
-    fun requestFullScan() {
+    fun requestFullScan(configId: String) {
         dismissScanSheet()
-        refreshLibrary(quickScan = false)
+        refreshLibrary(configId, quickScan = false)
     }
 
-    fun cancelScan() {
-        val config = _uiState.value.selectedSmbConfig ?: return
+    fun cancelScan(configId: String) {
+        dismissScanSheet()
         viewModelScope.launch {
-            smbLibraryRepository.cancelScan(config.id)
+            smbLibraryRepository.cancelScan(configId)
         }
     }
 
@@ -116,7 +161,7 @@ class SmbLibraryViewModel @Inject constructor(
         viewModelScope.launch {
             if (!song.isCacheDownloadEligible) return@launch
             val smbPath = song.smbPath ?: return@launch
-            val configId = _uiState.value.selectedSmbConfig?.id ?: return@launch
+            val configId = song.smbConfigId ?: return@launch
             if (downloadRepository.hasDownloadEntry(smbPath)) return@launch
             downloadRepository.startDownload(song.id, smbPath, configId)
         }
@@ -131,7 +176,6 @@ class SmbLibraryViewModel @Inject constructor(
 
     fun addAlbumToCache(album: Album) {
         viewModelScope.launch {
-            val configId = _uiState.value.selectedSmbConfig?.id ?: return@launch
             val albumArtist = album.albumArtist.ifBlank { album.artist }
             val targets = _uiState.value.songs.filter { song ->
                 song.album == album.name &&
@@ -140,6 +184,7 @@ class SmbLibraryViewModel @Inject constructor(
             }
             targets.forEach { song ->
                 val smbPath = song.smbPath ?: return@forEach
+                val configId = song.smbConfigId ?: return@forEach
                 if (!downloadRepository.hasDownloadEntry(smbPath)) {
                     downloadRepository.startDownload(song.id, smbPath, configId)
                 }
@@ -163,57 +208,13 @@ class SmbLibraryViewModel @Inject constructor(
         }
     }
 
-    private fun bindConfig(config: SmbConfig?) {
-        songsJob?.cancel()
-        albumsJob?.cancel()
-        artistsJob?.cancel()
-        refreshTimeJob?.cancel()
-        scanProgressJob?.cancel()
-
-        if (config == null || config.id.isBlank()) {
-            _uiState.update {
-                it.copy(
-                    songs = emptyList(),
-                    albums = emptyList(),
-                    artists = emptyList(),
-                    selectedSourceLabel = "",
-                    selectedSourcePathLabel = "",
-                    lastRefreshTime = null,
-                    hasCachedContent = false,
-                    scanProgress = SmbScanProgress(),
-                    showScanOptionsSheet = false
-                )
-            }
-            return
-        }
-
-        bindLibraryContent(config)
-
-        refreshTimeJob = viewModelScope.launch {
-            smbLibraryRepository.getLastRefreshTime(config.id).collect { timestamp ->
-                _uiState.update { it.copy(lastRefreshTime = timestamp) }
-            }
-        }
-        scanProgressJob = viewModelScope.launch {
-            smbLibraryRepository.observeScanProgress(config.id).collect { progress ->
-                _uiState.update {
-                    it.copy(
-                        isRefreshing = progress.isRunning,
-                        scanProgress = progress,
-                        showScanOptionsSheet = if (progress.isRunning) false else it.showScanOptionsSheet
-                    )
-                }
-            }
-        }
-    }
-
-    private fun bindLibraryContent(config: SmbConfig) {
+    private fun bindLibraryContent() {
         songsJob?.cancel()
         albumsJob?.cancel()
         artistsJob?.cancel()
 
         songsJob = viewModelScope.launch {
-            smbLibraryRepository.getSongs(config.id).collect { songs ->
+            smbLibraryRepository.getAllSongs().collect { songs ->
                 _uiState.update { state ->
                     state.copy(
                         songs = songs,
@@ -223,7 +224,7 @@ class SmbLibraryViewModel @Inject constructor(
             }
         }
         albumsJob = viewModelScope.launch {
-            smbLibraryRepository.getAlbums(config.id).collect { albums ->
+            smbLibraryRepository.getAllAlbums().collect { albums ->
                 _uiState.update { state ->
                     state.copy(
                         albums = albums,
@@ -233,7 +234,7 @@ class SmbLibraryViewModel @Inject constructor(
             }
         }
         artistsJob = viewModelScope.launch {
-            smbLibraryRepository.getArtists(config.id).collect { artists ->
+            smbLibraryRepository.getAllArtists().collect { artists ->
                 _uiState.update { state ->
                     state.copy(
                         artists = artists,
@@ -244,12 +245,16 @@ class SmbLibraryViewModel @Inject constructor(
         }
     }
 
-    private fun buildSourcePathLabel(config: SmbConfig): String {
-        return buildString {
-            append("${config.hostname}/${config.shareName}")
-            if (config.rootPath.isNotBlank()) {
-                append("/${config.rootPath}")
-            }
+    private fun refreshLibrary(configId: String, quickScan: Boolean) {
+        viewModelScope.launch {
+            smbLibraryRepository.enqueueScan(configId, quickScan)
         }
     }
+
+    private fun runningConfigIds(): Set<String> =
+        _uiState.value.scanProgressByConfig
+            .asSequence()
+            .filter { (_, progress) -> progress.isRunning }
+            .map { (configId, _) -> configId }
+            .toSet()
 }

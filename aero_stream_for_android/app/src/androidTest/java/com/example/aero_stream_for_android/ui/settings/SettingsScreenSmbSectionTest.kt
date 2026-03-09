@@ -32,8 +32,6 @@ class SettingsScreenSmbSectionTest {
             AeroStreamTheme {
                 SmbServersSection(
                     smbConfigs = listOf(config),
-                    selectedSmbConfigId = config.id,
-                    onSelect = {},
                     onAdd = {},
                     onEdit = { _ -> },
                     onDelete = { _ -> },
@@ -70,8 +68,6 @@ class SettingsScreenSmbSectionTest {
             AeroStreamTheme {
                 SmbServersSection(
                     smbConfigs = listOf(config),
-                    selectedSmbConfigId = config.id,
-                    onSelect = {},
                     onAdd = {},
                     onEdit = { _ -> },
                     onDelete = { _ -> },

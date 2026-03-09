@@ -2,6 +2,7 @@ package com.example.aero_stream_for_android.ui.root
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.aero_stream_for_android.data.local.preferences.UserPreferencesDataStore.StoredLibraryPageState
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
 import com.example.aero_stream_for_android.ui.library.LibraryCategory
@@ -13,8 +14,6 @@ import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,38 +43,49 @@ class RootViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(RootUiState())
     val uiState: StateFlow<RootUiState> = _uiState.asStateFlow()
-    private var smbScanProgressJob: Job? = null
 
     init {
         viewModelScope.launch {
-            settingsRepository.selectedSmbConfig.collectLatest { config ->
-                smbScanProgressJob?.cancel()
+            settingsRepository.selectedSmbConfig.collect { config ->
                 _uiState.update { state ->
                     state.copy(
                         selectedSmbConfigId = config?.id,
-                        isSmbScanRunning = false,
                         headerSpec = buildHeaderSpec(
                             route = state.currentRoute,
                             featureState = state.libraryFeatureState,
-                            isSmbScanRunning = false
+                            isSmbScanRunning = state.isSmbScanRunning
                         )
                     )
                 }
-
-                val configId = config?.id ?: return@collectLatest
-                smbScanProgressJob = launch {
-                    smbLibraryRepository.observeScanProgress(configId).collect { progress ->
-                        _uiState.update { state ->
-                            state.copy(
-                                isSmbScanRunning = progress.isRunning,
-                                headerSpec = buildHeaderSpec(
-                                    route = state.currentRoute,
-                                    featureState = state.libraryFeatureState,
-                                    isSmbScanRunning = progress.isRunning
-                                )
-                            )
-                        }
-                    }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.storedLibraryPageState.collect { stored ->
+                _uiState.update { state ->
+                    val nextFeatureState = normalizeStoredLibraryFeatureState(stored)
+                    state.copy(
+                        libraryFeatureState = nextFeatureState,
+                        headerSpec = buildHeaderSpec(
+                            route = state.currentRoute,
+                            featureState = nextFeatureState,
+                            isSmbScanRunning = state.isSmbScanRunning
+                        )
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            smbLibraryRepository.observeAllScanProgress().collect { progressByConfig ->
+                val isRunning = progressByConfig.values.any { progress -> progress.isRunning }
+                _uiState.update { state ->
+                    state.copy(
+                        isSmbScanRunning = isRunning,
+                        headerSpec = buildHeaderSpec(
+                            route = state.currentRoute,
+                            featureState = state.libraryFeatureState,
+                            isSmbScanRunning = isRunning
+                        )
+                    )
                 }
             }
         }
@@ -128,6 +138,7 @@ class RootViewModel @Inject constructor(
                 headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState, state.isSmbScanRunning)
             )
         }
+        persistLibraryFeatureState(_uiState.value.libraryFeatureState)
     }
 
     fun setLibraryCategory(category: LibraryCategory) {
@@ -141,6 +152,7 @@ class RootViewModel @Inject constructor(
                 headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState, state.isSmbScanRunning)
             )
         }
+        persistLibraryFeatureState(_uiState.value.libraryFeatureState)
     }
 
     fun setLibrarySort(sort: LibrarySort) {
@@ -152,6 +164,7 @@ class RootViewModel @Inject constructor(
                 headerSpec = buildHeaderSpec(state.currentRoute, nextFeatureState, state.isSmbScanRunning)
             )
         }
+        persistLibraryFeatureState(_uiState.value.libraryFeatureState)
     }
 
     fun updateHeaderHeight(heightPx: Int) {
@@ -274,5 +287,45 @@ class RootViewModel @Inject constructor(
     private fun defaultSortForCategory(category: LibraryCategory): LibrarySort = when (category) {
         LibraryCategory.Playlists -> LibrarySort(LibrarySortKey.CreatedAt, SortOrder.Desc)
         else -> LibrarySort(LibrarySortKey.Name, SortOrder.Asc)
+    }
+
+    private fun normalizeStoredLibraryFeatureState(stored: StoredLibraryPageState): LibraryFeatureState {
+        val source = stored.source
+            ?.let { raw -> enumValues<LibrarySource>().firstOrNull { it.name == raw } }
+            ?: LibrarySource.LocalFiles
+        val categories = categoriesForSource(source)
+        val category = stored.category
+            ?.let { raw -> enumValues<LibraryCategory>().firstOrNull { it.name == raw } }
+            ?.takeIf { it in categories }
+            ?: categories.first()
+        val sortKey = stored.sortKey
+            ?.let { raw -> enumValues<LibrarySortKey>().firstOrNull { it.name == raw } }
+            ?.takeIf { it in availableSortKeys(source, category) }
+        val sortOrder = stored.sortOrder
+            ?.let { raw -> enumValues<SortOrder>().firstOrNull { it.name == raw } }
+            ?: SortOrder.Asc
+        val sort = if (sortKey == null) {
+            defaultSortForCategory(category)
+        } else {
+            LibrarySort(sortKey, sortOrder)
+        }
+        return LibraryFeatureState(
+            source = source,
+            category = category,
+            sort = sort
+        )
+    }
+
+    private fun persistLibraryFeatureState(featureState: LibraryFeatureState) {
+        viewModelScope.launch {
+            settingsRepository.saveLibraryPageState(
+                StoredLibraryPageState(
+                    source = featureState.source.name,
+                    category = featureState.category.name,
+                    sortKey = featureState.sort.key.name,
+                    sortOrder = featureState.sort.order.name
+                )
+            )
+        }
     }
 }

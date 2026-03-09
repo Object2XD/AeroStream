@@ -47,7 +47,18 @@ class UserPreferencesDataStore @Inject constructor(
         val SHUFFLE_ENABLED = booleanPreferencesKey("shuffle_enabled")
         val REPEAT_MODE = stringPreferencesKey("repeat_mode")
         val LAST_NOTIFIED_SMB_SCAN_FAILURE_KEY = stringPreferencesKey("last_notified_smb_scan_failure_key")
+        val LAST_LIBRARY_SOURCE = stringPreferencesKey("last_library_source")
+        val LAST_LIBRARY_CATEGORY = stringPreferencesKey("last_library_category")
+        val LAST_LIBRARY_SORT_KEY = stringPreferencesKey("last_library_sort_key")
+        val LAST_LIBRARY_SORT_ORDER = stringPreferencesKey("last_library_sort_order")
     }
+
+    data class StoredLibraryPageState(
+        val source: String? = null,
+        val category: String? = null,
+        val sortKey: String? = null,
+        val sortOrder: String? = null
+    )
 
     val audioEngine: Flow<AudioEngine> = context.dataStore.data.map { prefs ->
         when (prefs[Keys.AUDIO_ENGINE]) {
@@ -226,6 +237,15 @@ class UserPreferencesDataStore @Inject constructor(
         prefs[Keys.REPEAT_MODE] ?: "OFF"
     }
 
+    val storedLibraryPageState: Flow<StoredLibraryPageState> = context.dataStore.data.map { prefs ->
+        StoredLibraryPageState(
+            source = prefs[Keys.LAST_LIBRARY_SOURCE],
+            category = prefs[Keys.LAST_LIBRARY_CATEGORY],
+            sortKey = prefs[Keys.LAST_LIBRARY_SORT_KEY],
+            sortOrder = prefs[Keys.LAST_LIBRARY_SORT_ORDER]
+        )
+    }
+
     suspend fun setShuffleEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.SHUFFLE_ENABLED] = enabled
@@ -235,6 +255,15 @@ class UserPreferencesDataStore @Inject constructor(
     suspend fun setRepeatMode(mode: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.REPEAT_MODE] = mode
+        }
+    }
+
+    suspend fun saveLibraryPageState(state: StoredLibraryPageState) {
+        context.dataStore.edit { prefs ->
+            state.source?.let { prefs[Keys.LAST_LIBRARY_SOURCE] = it } ?: prefs.remove(Keys.LAST_LIBRARY_SOURCE)
+            state.category?.let { prefs[Keys.LAST_LIBRARY_CATEGORY] = it } ?: prefs.remove(Keys.LAST_LIBRARY_CATEGORY)
+            state.sortKey?.let { prefs[Keys.LAST_LIBRARY_SORT_KEY] = it } ?: prefs.remove(Keys.LAST_LIBRARY_SORT_KEY)
+            state.sortOrder?.let { prefs[Keys.LAST_LIBRARY_SORT_ORDER] = it } ?: prefs.remove(Keys.LAST_LIBRARY_SORT_ORDER)
         }
     }
 

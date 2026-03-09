@@ -130,8 +130,6 @@ fun SettingsScreen(
             item {
                 SmbServersSection(
                     smbConfigs = uiState.smbConfigs,
-                    selectedSmbConfigId = uiState.selectedSmbConfigId,
-                    onSelect = viewModel::selectSmbConfig,
                     onAdd = {
                         viewModel.clearConnectionTestResult()
                         editorConfig = SmbConfig(

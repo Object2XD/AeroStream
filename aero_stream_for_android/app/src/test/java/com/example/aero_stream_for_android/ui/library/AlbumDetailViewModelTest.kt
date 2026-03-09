@@ -107,6 +107,44 @@ class AlbumDetailViewModelTest {
     }
 
     @Test
+    fun loadAlbum_smbSource_withoutConfigId_usesAllSmbSongs() = runTest(dispatcher) {
+        val smbSong = Song(
+            id = 11L,
+            title = "Unified SMB Song",
+            artist = "Artist",
+            albumArtist = "Artist",
+            album = "Album",
+            duration = 1000L,
+            source = MusicSource.SMB
+        )
+
+        every {
+            musicRepository.getSongsByAlbumAndSource("Album", "Artist", MusicSource.SMB)
+        } returns flowOf(listOf(smbSong))
+        every { downloadManager.observeAllDownloads() } returns flowOf(emptyList())
+        coEvery { settingsRepository.getSmbConfigById(any()) } returns null
+        coEvery { settingsRepository.getSelectedSmbConfig() } returns null
+
+        val savedStateHandle = SavedStateHandle(
+            mapOf(
+                Screen.AlbumDetail.albumNameArg to "Album",
+                Screen.AlbumDetail.albumArtistArg to "Artist",
+                Screen.AlbumDetail.sourceArg to MusicSource.SMB.name,
+                Screen.AlbumDetail.smbConfigIdArg to ""
+            )
+        )
+        val viewModel = AlbumDetailViewModel(musicRepository, downloadManager, settingsRepository, savedStateHandle)
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value.isLoading)
+        assertEquals(null, viewModel.uiState.value.error)
+        assertEquals(listOf(smbSong), viewModel.uiState.value.songs)
+        verify(exactly = 1) {
+            musicRepository.getSongsByAlbumAndSource("Album", "Artist", MusicSource.SMB)
+        }
+    }
+
+    @Test
     fun cacheAlbumTracks_smbSource_startsNewAndSkipsExisting() = runTest(dispatcher) {
         val smbSong1 = Song(
             id = 1L,

@@ -24,6 +24,15 @@ class SmbLibraryRepository @Inject constructor(
     private val smbScanSourceAdapter: SmbScanSourceAdapter,
     private val scanManager: SmbLibraryScanManager
 ) {
+    fun getAllSongs(): Flow<List<Song>> =
+        musicRepository.getSongsBySource(MusicSource.SMB)
+
+    fun getAllAlbums(): Flow<List<Album>> =
+        musicRepository.getAlbumsBySource(MusicSource.SMB)
+
+    fun getAllArtists(): Flow<List<Artist>> =
+        musicRepository.getArtistsBySource(MusicSource.SMB)
+
     fun getSongs(smbConfigId: String): Flow<List<Song>> =
         musicRepository.getSongsBySourceAndSmbConfig(MusicSource.SMB, smbConfigId)
 
@@ -36,8 +45,14 @@ class SmbLibraryRepository @Inject constructor(
     fun getLastRefreshTime(smbConfigId: String): Flow<Long?> =
         statusDao.observeLastSuccessfulScanAt(MusicSource.SMB.name, smbConfigId)
 
+    fun getLastRefreshTime(): Flow<Long?> =
+        statusDao.observeLastSuccessfulScanAtForSource(MusicSource.SMB.name)
+
     fun observeScanProgress(smbConfigId: String): Flow<SmbScanProgress> =
         scanManager.observeScanProgress(smbConfigId)
+
+    fun observeAllScanProgress(): Flow<Map<String, SmbScanProgress>> =
+        scanManager.observeAllScanProgress()
 
     suspend fun enqueueScan(smbConfigId: String, quickScan: Boolean = true) {
         scanManager.enqueueScan(smbConfigId, quickScan)

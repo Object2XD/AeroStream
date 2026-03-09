@@ -119,24 +119,25 @@ class AlbumDetailViewModel @Inject constructor(
             return
         }
 
-        if (source == MusicSource.SMB && smbConfigId.isNullOrBlank()) {
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    error = "SMB設定が見つかりませんでした"
-                )
-            }
-            return
-        }
-
         viewModelScope.launch {
             val songsFlow = when (source) {
-                MusicSource.SMB -> musicRepository.getSongsByAlbumSourceAndSmbConfig(
-                    album = albumName,
-                    albumArtist = albumArtist,
-                    source = MusicSource.SMB,
-                    smbConfigId = smbConfigId.orEmpty()
-                )
+                MusicSource.SMB -> {
+                    val configId = smbConfigId
+                    if (!configId.isNullOrBlank()) {
+                        musicRepository.getSongsByAlbumSourceAndSmbConfig(
+                            album = albumName,
+                            albumArtist = albumArtist,
+                            source = MusicSource.SMB,
+                            smbConfigId = configId
+                        )
+                    } else {
+                        musicRepository.getSongsByAlbumAndSource(
+                            album = albumName,
+                            albumArtist = albumArtist,
+                            source = MusicSource.SMB
+                        )
+                    }
+                }
 
                 MusicSource.LOCAL -> musicRepository.getSongsByAlbumAndSource(
                     album = albumName,

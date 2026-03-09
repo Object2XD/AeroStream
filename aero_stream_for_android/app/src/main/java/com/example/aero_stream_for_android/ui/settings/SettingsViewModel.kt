@@ -23,7 +23,6 @@ data class SettingsUiState(
     val audioEngine: AudioEngine = AudioEngine.MEDIA3,
     val themeMode: String = "system",
     val smbConfigs: List<SmbConfig> = emptyList(),
-    val selectedSmbConfigId: String? = null,
     val isTestingConnection: Boolean = false,
     val connectionTestResult: SmbConnectionTestResult? = null,
     val isClearingLoadedMusicDatabase: Boolean = false
@@ -59,11 +58,6 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(smbConfigs = configs) }
             }
         }
-        viewModelScope.launch {
-            settingsRepository.selectedSmbConfigId.collect { selectedId ->
-                _uiState.update { it.copy(selectedSmbConfigId = selectedId) }
-            }
-        }
     }
 
     fun setAudioEngine(engine: AudioEngine) {
@@ -95,12 +89,6 @@ class SettingsViewModel @Inject constructor(
     fun deleteSmbConfig(id: String) {
         viewModelScope.launch {
             settingsRepository.deleteSmbConfig(id)
-        }
-    }
-
-    fun selectSmbConfig(id: String) {
-        viewModelScope.launch {
-            settingsRepository.selectSmbConfig(id)
         }
     }
 

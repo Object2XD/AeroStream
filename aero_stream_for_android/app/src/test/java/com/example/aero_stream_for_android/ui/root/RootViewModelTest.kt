@@ -1,19 +1,25 @@
 package com.example.aero_stream_for_android.ui.root
 
+import com.example.aero_stream_for_android.data.local.preferences.UserPreferencesDataStore.StoredLibraryPageState
 import com.example.aero_stream_for_android.data.repository.SettingsRepository
 import com.example.aero_stream_for_android.data.repository.SmbLibraryRepository
+import com.example.aero_stream_for_android.data.scan.LibraryScanProgress
 import com.example.aero_stream_for_android.ui.library.LibraryCategory
 import com.example.aero_stream_for_android.ui.library.LibrarySort
 import com.example.aero_stream_for_android.ui.library.LibrarySortKey
 import com.example.aero_stream_for_android.ui.library.LibrarySource
 import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.navigation.Screen
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import kotlinx.coroutines.flow.emptyFlow
@@ -43,7 +49,9 @@ class RootViewModelTest {
         val settingsRepository = mockk<SettingsRepository>()
         val smbLibraryRepository = mockk<SmbLibraryRepository>()
         every { settingsRepository.selectedSmbConfig } returns flowOf(null)
-        every { smbLibraryRepository.observeScanProgress(any()) } returns emptyFlow()
+        every { settingsRepository.storedLibraryPageState } returns flowOf(StoredLibraryPageState())
+        coEvery { settingsRepository.saveLibraryPageState(any()) } returns Unit
+        every { smbLibraryRepository.observeAllScanProgress() } returns emptyFlow()
         return RootViewModel(settingsRepository, smbLibraryRepository)
     }
 
@@ -320,5 +328,112 @@ class RootViewModelTest {
 
         assertEquals(100, viewModel.uiState.value.quickReturnHeaderState.totalHeaderHeightPx)
         assertEquals(-100f, viewModel.uiState.value.quickReturnHeaderState.headerOffsetPx)
+    }
+
+    @Test
+    fun onRouteChanged_library_whenAnySmbScanRunning_showsCancelAction() = runTest(dispatcher) {
+        val settingsRepository = mockk<SettingsRepository>()
+        val smbLibraryRepository = mockk<SmbLibraryRepository>()
+        every { settingsRepository.selectedSmbConfig } returns flowOf(null)
+        every { settingsRepository.storedLibraryPageState } returns flowOf(StoredLibraryPageState())
+        coEvery { settingsRepository.saveLibraryPageState(any()) } returns Unit
+        every {
+            smbLibraryRepository.observeAllScanProgress()
+        } returns flowOf(mapOf("cfgA" to LibraryScanProgress(isRunning = true, sourceConfigId = "cfgA")))
+
+        val viewModel = RootViewModel(settingsRepository, smbLibraryRepository)
+        advanceUntilIdle()
+
+        viewModel.onRouteChanged(Screen.Library.route)
+        viewModel.setLibrarySource(LibrarySource.SMB)
+
+        val state = viewModel.uiState.value
+        assertTrue(state.isSmbScanRunning)
+        assertEquals(
+            listOf(HeaderAction.Search, HeaderAction.CancelSmbScan, HeaderAction.Settings),
+            state.headerSpec.actions
+        )
+    }
+
+    @Test
+    fun init_restoresSavedLibraryFeatureState() = runTest(dispatcher) {
+        val settingsRepository = mockk<SettingsRepository>()
+        val smbLibraryRepository = mockk<SmbLibraryRepository>()
+        every { settingsRepository.selectedSmbConfig } returns flowOf(null)
+        every {
+            settingsRepository.storedLibraryPageState
+        } returns flowOf(
+            StoredLibraryPageState(
+                source = LibrarySource.SMB.name,
+                category = LibraryCategory.Artists.name,
+                sortKey = LibrarySortKey.SongCount.name,
+                sortOrder = SortOrder.Desc.name
+            )
+        )
+        coEvery { settingsRepository.saveLibraryPageState(any()) } returns Unit
+        every { smbLibraryRepository.observeAllScanProgress() } returns emptyFlow()
+
+        val viewModel = RootViewModel(settingsRepository, smbLibraryRepository)
+        advanceUntilIdle()
+        val state = viewModel.uiState.value
+
+        assertEquals(LibrarySource.SMB, state.libraryFeatureState.source)
+        assertEquals(LibraryCategory.Artists, state.libraryFeatureState.category)
+        assertEquals(LibrarySort(LibrarySortKey.SongCount, SortOrder.Desc), state.libraryFeatureState.sort)
+    }
+
+    @Test
+    fun init_invalidStoredState_normalizesToSupportedValues() = runTest(dispatcher) {
+        val settingsRepository = mockk<SettingsRepository>()
+        val smbLibraryRepository = mockk<SmbLibraryRepository>()
+        every { settingsRepository.selectedSmbConfig } returns flowOf(null)
+        every {
+            settingsRepository.storedLibraryPageState
+        } returns flowOf(
+            StoredLibraryPageState(
+                source = "INVALID_SOURCE",
+                category = LibraryCategory.Playlists.name,
+                sortKey = LibrarySortKey.CreatedAt.name,
+                sortOrder = "INVALID_ORDER"
+            )
+        )
+        coEvery { settingsRepository.saveLibraryPageState(any()) } returns Unit
+        every { smbLibraryRepository.observeAllScanProgress() } returns emptyFlow()
+
+        val viewModel = RootViewModel(settingsRepository, smbLibraryRepository)
+        advanceUntilIdle()
+        val state = viewModel.uiState.value
+
+        assertEquals(LibrarySource.LocalFiles, state.libraryFeatureState.source)
+        assertEquals(LibraryCategory.Playlists, state.libraryFeatureState.category)
+        assertEquals(LibrarySort(LibrarySortKey.CreatedAt, SortOrder.Asc), state.libraryFeatureState.sort)
+    }
+
+    @Test
+    fun setLibraryState_operationsPersistLastLibraryPageState() = runTest(dispatcher) {
+        val settingsRepository = mockk<SettingsRepository>()
+        val smbLibraryRepository = mockk<SmbLibraryRepository>()
+        every { settingsRepository.selectedSmbConfig } returns flowOf(null)
+        every { settingsRepository.storedLibraryPageState } returns flowOf(StoredLibraryPageState())
+        coEvery { settingsRepository.saveLibraryPageState(any()) } returns Unit
+        every { smbLibraryRepository.observeAllScanProgress() } returns emptyFlow()
+        val viewModel = RootViewModel(settingsRepository, smbLibraryRepository)
+        advanceUntilIdle()
+
+        viewModel.setLibrarySource(LibrarySource.SMB)
+        viewModel.setLibraryCategory(LibraryCategory.Albums)
+        viewModel.setLibrarySort(LibrarySort(LibrarySortKey.Artist, SortOrder.Desc))
+        advanceUntilIdle()
+
+        coVerify(atLeast = 1) {
+            settingsRepository.saveLibraryPageState(
+                match { saved ->
+                    saved.source == LibrarySource.SMB.name &&
+                        saved.category == LibraryCategory.Albums.name &&
+                        saved.sortKey == LibrarySortKey.Artist.name &&
+                        saved.sortOrder == SortOrder.Desc.name
+                }
+            )
+        }
     }
 }

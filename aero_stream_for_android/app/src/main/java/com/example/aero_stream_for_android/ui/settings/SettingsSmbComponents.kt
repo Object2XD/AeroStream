@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
@@ -49,11 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -74,8 +70,6 @@ internal const val SMB_SECTION_TAG = "settings_smb_section"
 @Composable
 internal fun SmbServersSection(
     smbConfigs: List<SmbConfig>,
-    selectedSmbConfigId: String?,
-    onSelect: (String) -> Unit,
     onAdd: () -> Unit,
     onEdit: (SmbConfig) -> Unit,
     onDelete: (SmbConfig) -> Unit,
@@ -100,8 +94,6 @@ internal fun SmbServersSection(
             smbConfigs.forEach { config ->
                 SmbServerCard(
                     config = config,
-                    isSelected = selectedSmbConfigId == config.id,
-                    onSelect = { onSelect(config.id) },
                     onRefresh = { onRefresh(config.id) },
                     onBrowse = { onBrowse(config.id) },
                     onEdit = { onEdit(config) },
@@ -124,8 +116,6 @@ internal fun SmbServersSection(
 @Composable
 private fun SmbServerCard(
     config: SmbConfig,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
     onRefresh: () -> Unit,
     onBrowse: () -> Unit,
     onEdit: () -> Unit,
@@ -148,11 +138,8 @@ private fun SmbServerCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
-                .clickable(onClick = onSelect)
                 .semantics(mergeDescendants = true) {
-                    role = Role.Button
                     contentDescription = topDescription
-                    stateDescription = if (isSelected) "選択中" else "未選択"
                 }
                 .padding(horizontal = 4.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -164,7 +151,7 @@ private fun SmbServerCard(
                 contentAlignment = Alignment.CenterStart
             ) {
                 Icon(
-                    imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Storage,
+                    imageVector = Icons.Default.Storage,
                     contentDescription = null
                 )
             }
@@ -204,15 +191,7 @@ private fun SmbServerCard(
                     .width(58.dp)
                     .testTag("smb_${config.id}_top_anchor"),
                 contentAlignment = Alignment.CenterEnd
-            ) {
-                if (isSelected) {
-                    Text(
-                        text = "選択中",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
+            ) {}
         }
 
         Row(

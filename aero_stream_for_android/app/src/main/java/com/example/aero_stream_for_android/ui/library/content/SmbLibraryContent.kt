@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,7 @@ import com.example.aero_stream_for_android.ui.library.LibrarySortKey
 import com.example.aero_stream_for_android.ui.library.SortOrder
 import com.example.aero_stream_for_android.ui.player.PlayerViewModel
 import com.example.aero_stream_for_android.ui.root.LocalPlayerSheetBottomClearance
+import com.example.aero_stream_for_android.ui.smb.ScanTargetSheetMode
 import com.example.aero_stream_for_android.ui.smb.SmbLibraryViewModel
 import kotlinx.coroutines.launch
 
@@ -92,34 +94,65 @@ fun SmbLibraryContent(
 
     LaunchedEffect(openScanOptionsRequestToken) {
         if (openScanOptionsRequestToken > 0) {
-            viewModel.showScanSheet()
+            viewModel.showRefreshTargetSheet()
         }
     }
 
     LaunchedEffect(cancelScanRequestToken) {
         if (cancelScanRequestToken > 0) {
-            viewModel.cancelScan()
+            viewModel.showCancelTargetSheet()
         }
     }
 
-    if (uiState.showScanOptionsSheet) {
+    if (uiState.showScanTargetSheet) {
         AeroModalSheet(onDismissRequest = viewModel::dismissScanSheet) {
             AeroSheetScaffold(
-                title = "SMB ライブラリ更新",
+                title = if (uiState.scanTargetSheetMode == ScanTargetSheetMode.Cancel) {
+                    "SMB ライブラリ更新をキャンセル"
+                } else {
+                    "SMB ライブラリ更新"
+                },
                 onDismiss = viewModel::dismissScanSheet
             ) {
-                SmbScanOptionRow(
-                    title = "クイックスキャン",
-                    description = "変更された曲だけを優先して確認します。",
-                    icon = Icons.Default.Bolt,
-                    onClick = viewModel::requestQuickScan
-                )
-                SmbScanOptionRow(
-                    title = "フルスキャン",
-                    description = "ライブラリ全体を最初から再確認します。",
-                    icon = Icons.Default.Refresh,
-                    onClick = viewModel::requestFullScan
-                )
+                val targets = when (uiState.scanTargetSheetMode) {
+                    ScanTargetSheetMode.Cancel -> uiState.smbConfigs.filter { config ->
+                        uiState.scanProgressByConfig[config.id]?.isRunning == true
+                    }
+
+                    ScanTargetSheetMode.Refresh -> uiState.smbConfigs
+                    null -> emptyList()
+                }
+                if (targets.isEmpty()) {
+                    SmbScanOptionRow(
+                        title = "対象がありません",
+                        description = if (uiState.scanTargetSheetMode == ScanTargetSheetMode.Cancel) {
+                            "実行中のSMB更新はありません。"
+                        } else {
+                            "SMBサーバーが設定されていません。"
+                        },
+                        icon = Icons.Default.Refresh,
+                        onClick = {}
+                    )
+                } else {
+                    targets.forEach { config ->
+                        if (uiState.scanTargetSheetMode == ScanTargetSheetMode.Cancel) {
+                            SmbSingleActionRow(
+                                title = config.displayName.ifBlank { "SMB" },
+                                description = "${config.hostname}/${config.shareName}",
+                                icon = Icons.Default.Delete,
+                                actionLabel = "キャンセル",
+                                onClick = { viewModel.cancelScan(config.id) }
+                            )
+                        } else {
+                            SmbRefreshActionRow(
+                                title = config.displayName.ifBlank { "SMB" },
+                                description = "${config.hostname}/${config.shareName}",
+                                onQuickScan = { viewModel.requestQuickScan(config.id) },
+                                onFullScan = { viewModel.requestFullScan(config.id) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -131,7 +164,7 @@ fun SmbLibraryContent(
             contentPadding = PaddingValues(bottom = playerSheetBottomClearance + 24.dp)
         ) {
             when {
-                uiState.selectedSmbConfig == null -> {
+                uiState.smbConfigs.isEmpty() -> {
                     item { LibraryEmptyState("SMBサーバーが設定されていません") }
                 }
 
@@ -229,7 +262,7 @@ fun SmbLibraryContent(
                                             )
                                         },
                                         onClick = {
-                                            onNavigateToAlbumDetail(album, MusicSource.SMB, uiState.selectedSmbConfig?.id)
+                                            onNavigateToAlbumDetail(album, MusicSource.SMB, null)
                                         }
                                     )
                                 }
@@ -250,7 +283,7 @@ fun SmbLibraryContent(
                                             onNavigateToArtistDetail(
                                                 artist.name,
                                                 MusicSource.SMB,
-                                                uiState.selectedSmbConfig?.id
+                                                null
                                             )
                                         }
                                     )
@@ -267,7 +300,7 @@ fun SmbLibraryContent(
         LibraryFastScroller(
             progress = scrollController.progress.value,
             visible = scrollController.canScroll.value &&
-                uiState.selectedSmbConfig != null &&
+                uiState.smbConfigs.isNotEmpty() &&
                 !uiState.isLoading &&
                 uiState.hasCachedContent,
             isNameSort = isNameSort,
@@ -325,6 +358,109 @@ private fun SmbScanOptionRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SmbRefreshActionRow(
+    title: String,
+    description: String,
+    onQuickScan: () -> Unit,
+    onFullScan: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+            ) {
+                FilledTonalButton(
+                    modifier = Modifier.weight(1f),
+                    onClick = onQuickScan
+                ) {
+                    Icon(Icons.Default.Bolt, contentDescription = null)
+                    Text(text = "クイック", modifier = Modifier.padding(start = 8.dp))
+                }
+                FilledTonalButton(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp),
+                    onClick = onFullScan
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Text(text = "フル", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmbSingleActionRow(
+    title: String,
+    description: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    actionLabel: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 14.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }

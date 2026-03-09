@@ -1,6 +1,7 @@
 package com.example.aero_stream_for_android.data.repository
 
 import com.example.aero_stream_for_android.data.local.preferences.UserPreferencesDataStore
+import com.example.aero_stream_for_android.data.local.preferences.UserPreferencesDataStore.StoredLibraryPageState
 import com.example.aero_stream_for_android.domain.model.AudioEngine
 import com.example.aero_stream_for_android.domain.model.SmbConfig
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,7 @@ class SettingsRepository @Inject constructor(
     }
     val shuffleEnabled: Flow<Boolean> = preferencesDataStore.shuffleEnabled
     val repeatMode: Flow<String> = preferencesDataStore.repeatMode
+    val storedLibraryPageState: Flow<StoredLibraryPageState> = preferencesDataStore.storedLibraryPageState
 
     suspend fun migrateLegacySmbConfigIfNeeded() = preferencesDataStore.migrateLegacySmbConfigIfNeeded()
 
@@ -43,6 +45,7 @@ class SettingsRepository @Inject constructor(
         preferencesDataStore.setSelectedSmbLibraryBuckets(smbConfigId, buckets)
     suspend fun setShuffleEnabled(enabled: Boolean) = preferencesDataStore.setShuffleEnabled(enabled)
     suspend fun setRepeatMode(mode: String) = preferencesDataStore.setRepeatMode(mode)
+    suspend fun saveLibraryPageState(state: StoredLibraryPageState) = preferencesDataStore.saveLibraryPageState(state)
     suspend fun getLastNotifiedSmbScanFailureKey() = preferencesDataStore.getLastNotifiedSmbScanFailureKey()
     suspend fun setLastNotifiedSmbScanFailureKey(key: String) =
         preferencesDataStore.setLastNotifiedSmbScanFailureKey(key)
