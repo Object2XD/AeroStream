@@ -323,9 +323,9 @@ internal fun resolvePlayerSheetForRouteVisibility(
  */
 private fun NavBackStackEntry.toActualRoute(): String? {
     val pattern = destination.route ?: return null
-    val args = arguments ?: return pattern
     return when {
         pattern.startsWith(Screen.AlbumDetail.route) -> {
+            val args = arguments ?: return null
             val albumName = args.getString(Screen.AlbumDetail.albumNameArg) ?: return null
             val albumArtist = args.getString(Screen.AlbumDetail.albumArtistArg) ?: return null
             val source = args.getString(Screen.AlbumDetail.sourceArg).toMusicSourceOrNull()
@@ -334,6 +334,7 @@ private fun NavBackStackEntry.toActualRoute(): String? {
             Screen.AlbumDetail.createRoute(albumName, albumArtist, source, smbConfigId, year)
         }
         pattern.startsWith(Screen.ArtistDetail.route) -> {
+            val args = arguments ?: return null
             val artistName = args.getString(Screen.ArtistDetail.artistNameArg) ?: return null
             val source = args.getString(Screen.ArtistDetail.sourceArg).toMusicSourceOrNull()
             val smbConfigId = args.getString(Screen.ArtistDetail.smbConfigIdArg).emptyToNull()
