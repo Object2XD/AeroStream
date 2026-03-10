@@ -80,18 +80,7 @@ class QueueManager {
             // shuffledQueue and fail to place the playing song at the front of the shuffle.
             val current = currentSong
             isShuffled = true
-            shuffledQueue = originalQueue.shuffled()
-            if (current != null) {
-                val mutable = shuffledQueue.toMutableList()
-                // Use reference equality first so that only this specific instance is removed,
-                // preserving other songs that share the same ID.
-                val indexByReference = mutable.indexOfFirst { it === current }
-                val idxToRemove = if (indexByReference >= 0) indexByReference else mutable.indexOfFirst { it.id == current.id }
-                if (idxToRemove >= 0) mutable.removeAt(idxToRemove)
-                mutable.add(0, current)
-                shuffledQueue = mutable
-                currentIndex = 0
-            }
+            reshuffleQueue(current)
         } else if (!enabled && isShuffled) {
             // シャッフル解除：現在再生中の曲をoriginalQueueで探す
             val current = currentSong
@@ -137,8 +126,7 @@ class QueueManager {
         currentIndex = -1
     }
 
-    private fun reshuffleQueue() {
-        val current = currentSong
+    private fun reshuffleQueue(current: Song? = currentSong) {
         shuffledQueue = originalQueue.shuffled()
         if (current != null) {
             // 現在の曲を先頭に持ってくる
