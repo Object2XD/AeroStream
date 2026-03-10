@@ -126,63 +126,65 @@ class DownloadWorker @AssistedInject constructor(
                 null
             )
 
-            val fileSize = smbFile.fileInformation.standardInformation.endOfFile
-            downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, 0, fileSize)
-            updateForegroundNotification(
-                downloadId = downloadId,
-                smbPath = smbPath,
-                downloadedBytes = 0L,
-                fileSize = fileSize
-            )
-            Log.d(TAG, "stage=$stage downloadId=$downloadId fileSize=$fileSize")
             var downloadedBytes = 0L
+            try {
+                val fileSize = smbFile.fileInformation.standardInformation.endOfFile
+                downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, 0, fileSize)
+                updateForegroundNotification(
+                    downloadId = downloadId,
+                    smbPath = smbPath,
+                    downloadedBytes = 0L,
+                    fileSize = fileSize
+                )
+                Log.d(TAG, "stage=$stage downloadId=$downloadId fileSize=$fileSize")
 
-            // ファイルをダウンロード
-            stage = "stream-copy"
-            smbFile.inputStream.use { inputStream ->
-                FileOutputStream(localFile).use { outputStream ->
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    var bytesRead: Int
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        outputStream.write(buffer, 0, bytesRead)
-                        downloadedBytes += bytesRead
+                // ファイルをダウンロード
+                stage = "stream-copy"
+                smbFile.inputStream.use { inputStream ->
+                    FileOutputStream(localFile).use { outputStream ->
+                        val buffer = ByteArray(BUFFER_SIZE)
+                        var bytesRead: Int
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            outputStream.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
 
-                        // 進捗を更新
-                        downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, downloadedBytes, fileSize)
+                            // 進捗を更新
+                            downloadDao.updateProgress(downloadId, DownloadState.DOWNLOADING, downloadedBytes, fileSize)
 
-                        // WorkManagerの進捗をセット
-                        setProgress(
-                            workDataOf(
-                                "progress" to progressPercent(downloadedBytes, fileSize)
+                            // WorkManagerの進捗をセット
+                            setProgress(
+                                workDataOf(
+                                    "progress" to progressPercent(downloadedBytes, fileSize)
+                                )
                             )
-                        )
-                        if (DownloadWorkerDiagnostics.shouldEmitProgressLog(
+                            if (DownloadWorkerDiagnostics.shouldEmitProgressLog(
+                                    downloadedBytes = downloadedBytes,
+                                    fileSize = fileSize,
+                                    lastLoggedPercent = lastLoggedPercent,
+                                    lastLoggedMib = lastLoggedMib
+                                )
+                            ) {
+                                val currentPercent = progressPercent(downloadedBytes, fileSize)
+                                val currentMib = downloadedBytes / (1024L * 1024L)
+                                lastLoggedPercent = currentPercent
+                                lastLoggedMib = currentMib
+                                Log.d(
+                                    TAG,
+                                    "stage=$stage downloadId=$downloadId progress=${currentPercent}% bytes=$downloadedBytes/$fileSize"
+                                )
+                            }
+                            updateForegroundNotification(
+                                downloadId = downloadId,
+                                smbPath = smbPath,
                                 downloadedBytes = downloadedBytes,
-                                fileSize = fileSize,
-                                lastLoggedPercent = lastLoggedPercent,
-                                lastLoggedMib = lastLoggedMib
-                            )
-                        ) {
-                            val currentPercent = progressPercent(downloadedBytes, fileSize)
-                            val currentMib = downloadedBytes / (1024L * 1024L)
-                            lastLoggedPercent = currentPercent
-                            lastLoggedMib = currentMib
-                            Log.d(
-                                TAG,
-                                "stage=$stage downloadId=$downloadId progress=${currentPercent}% bytes=$downloadedBytes/$fileSize"
+                                fileSize = fileSize
                             )
                         }
-                        updateForegroundNotification(
-                            downloadId = downloadId,
-                            smbPath = smbPath,
-                            downloadedBytes = downloadedBytes,
-                            fileSize = fileSize
-                        )
                     }
                 }
+            } finally {
+                runCatching { smbFile.close() }
             }
-
-            smbFile.close()
 
             // ダウンロード完了を記録
             stage = "db-complete"
