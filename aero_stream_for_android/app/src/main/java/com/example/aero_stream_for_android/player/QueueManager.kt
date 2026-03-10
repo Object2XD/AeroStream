@@ -33,7 +33,7 @@ class QueueManager {
         originalQueue = songs
         currentIndex = startIndex
         if (isShuffled) {
-            reshuffleQueue()
+            reshuffleQueue(songs.getOrNull(startIndex))
         }
     }
 
@@ -75,8 +75,12 @@ class QueueManager {
 
     fun setShuffle(enabled: Boolean) {
         if (enabled && !isShuffled) {
+            // Read currentSong before flipping the flag so it reads from originalQueue.
+            // If we set isShuffled = true first, currentSong would read from the (still-empty)
+            // shuffledQueue and fail to place the playing song at the front of the shuffle.
+            val current = currentSong
             isShuffled = true
-            reshuffleQueue()
+            reshuffleQueue(current)
         } else if (!enabled && isShuffled) {
             // シャッフル解除：現在再生中の曲をoriginalQueueで探す
             val current = currentSong
@@ -122,16 +126,24 @@ class QueueManager {
         currentIndex = -1
     }
 
-    private fun reshuffleQueue() {
-        val current = currentSong
+    private fun reshuffleQueue(current: Song? = currentSong) {
         shuffledQueue = originalQueue.shuffled()
         if (current != null) {
             // 現在の曲を先頭に持ってくる
             val mutable = shuffledQueue.toMutableList()
-            mutable.removeAll { it.id == current.id }
-            mutable.add(0, current)
-            shuffledQueue = mutable
-            currentIndex = 0
+            // Use reference equality first so that only this specific instance is removed,
+            // preserving other songs that share the same ID.
+            val indexByReference = mutable.indexOfFirst { it === current }
+            val idxToRemove = if (indexByReference >= 0) indexByReference else mutable.indexOfFirst { it.id == current.id }
+            if (idxToRemove >= 0) {
+                // Current song found — remove it from its shuffled position and pin it at index 0.
+                mutable.removeAt(idxToRemove)
+                mutable.add(0, current)
+                shuffledQueue = mutable
+                currentIndex = 0
+            }
+            // If current is not in originalQueue (e.g. setQueue replaced the queue entirely),
+            // leave shuffledQueue as-is to preserve cardinality. currentIndex is unchanged.
         }
     }
 }
