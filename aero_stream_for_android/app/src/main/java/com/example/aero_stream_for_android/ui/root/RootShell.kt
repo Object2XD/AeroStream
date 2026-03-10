@@ -37,9 +37,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.aero_stream_for_android.domain.model.MusicSource
 import com.example.aero_stream_for_android.ui.components.ExpandablePlayerSheet
 import com.example.aero_stream_for_android.ui.components.ExpandablePlayerSheetValue
 import com.example.aero_stream_for_android.ui.components.collapsePlayerSheet
@@ -59,7 +61,7 @@ fun RootShell(
     val rootState by rootViewModel.uiState.collectAsStateWithLifecycle()
     val playerState by playerViewModel.playerState.collectAsStateWithLifecycle()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val currentRoute = navBackStackEntry?.toActualRoute()
     val appRoute = routeToAppRoute(currentRoute)
     val isPlayerSheetVisibleRoute = appRoute.isPlayerSheetVisibleRoute()
     var playerSheetValue by rememberSaveable { mutableStateOf(ExpandablePlayerSheetValue.Hidden) }
@@ -311,6 +313,40 @@ internal fun resolvePlayerSheetForRouteVisibility(
         stashedValue = null
     )
 }
+
+/**
+ * Reconstructs the actual navigated route string with argument values from the back stack entry.
+ * For detail screens, reads decoded argument values from [NavBackStackEntry.arguments] and
+ * re-encodes them using [Screen.AlbumDetail.createRoute] / [Screen.ArtistDetail.createRoute],
+ * so that [routeToAppRoute] can parse and restore the full [AppRoute] with its arguments.
+ * For all other screens, returns the destination route pattern as-is.
+ */
+private fun NavBackStackEntry.toActualRoute(): String? {
+    val pattern = destination.route ?: return null
+    val args = arguments ?: return pattern
+    return when {
+        pattern.startsWith(Screen.AlbumDetail.route) -> {
+            val albumName = args.getString(Screen.AlbumDetail.albumNameArg) ?: return null
+            val albumArtist = args.getString(Screen.AlbumDetail.albumArtistArg) ?: return null
+            val source = args.getString(Screen.AlbumDetail.sourceArg).toMusicSourceOrNull()
+            val smbConfigId = args.getString(Screen.AlbumDetail.smbConfigIdArg).emptyToNull()
+            val year = args.getString(Screen.AlbumDetail.yearArg)?.toIntOrNull()
+            Screen.AlbumDetail.createRoute(albumName, albumArtist, source, smbConfigId, year)
+        }
+        pattern.startsWith(Screen.ArtistDetail.route) -> {
+            val artistName = args.getString(Screen.ArtistDetail.artistNameArg) ?: return null
+            val source = args.getString(Screen.ArtistDetail.sourceArg).toMusicSourceOrNull()
+            val smbConfigId = args.getString(Screen.ArtistDetail.smbConfigIdArg).emptyToNull()
+            Screen.ArtistDetail.createRoute(artistName, source, smbConfigId)
+        }
+        else -> pattern
+    }
+}
+
+private fun String?.toMusicSourceOrNull(): MusicSource? =
+    this?.let { src -> MusicSource.entries.firstOrNull { it.name == src } }
+
+private fun String?.emptyToNull(): String? = this?.takeIf { it.isNotEmpty() }
 
 private data class EdgeBackdropSpec(
     val baseTone: Color,

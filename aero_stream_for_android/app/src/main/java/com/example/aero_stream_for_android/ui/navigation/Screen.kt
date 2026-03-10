@@ -2,6 +2,7 @@ package com.example.aero_stream_for_android.ui.navigation
 
 import android.net.Uri
 import androidx.compose.material.icons.Icons
+import java.net.URLDecoder
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,6 +85,14 @@ sealed class Screen(
         val routePattern =
             "$route?$albumNameArg={$albumNameArg}&$albumArtistArg={$albumArtistArg}&$sourceArg={$sourceArg}&$smbConfigIdArg={$smbConfigIdArg}&$yearArg={$yearArg}"
 
+        data class Args(
+            val albumName: String,
+            val albumArtist: String,
+            val source: String,
+            val smbConfigId: String,
+            val year: String
+        )
+
         fun createRoute(
             albumName: String,
             albumArtist: String,
@@ -98,6 +107,16 @@ sealed class Screen(
             val encodedSource = source?.name.orEmpty()
             return "$route?$albumNameArg=$encodedAlbumName&$albumArtistArg=$encodedAlbumArtist&$sourceArg=$encodedSource&$smbConfigIdArg=$encodedSmbConfigId&$yearArg=$encodedYear"
         }
+
+        fun parseRouteArgs(routeString: String): Args? {
+            val params = parseQueryParams(routeString) ?: return null
+            val albumName = params[albumNameArg] ?: return null
+            val albumArtist = params[albumArtistArg] ?: return null
+            val source = params[sourceArg] ?: return null
+            val smbConfigId = params[smbConfigIdArg] ?: ""
+            val year = params[yearArg] ?: ""
+            return Args(albumName, albumArtist, source, smbConfigId, year)
+        }
     }
 
     data object ArtistDetail : Screen(
@@ -111,6 +130,12 @@ sealed class Screen(
         val routePattern =
             "$route?$artistNameArg={$artistNameArg}&$sourceArg={$sourceArg}&$smbConfigIdArg={$smbConfigIdArg}"
 
+        data class Args(
+            val artistName: String,
+            val source: String,
+            val smbConfigId: String
+        )
+
         fun createRoute(
             artistName: String,
             source: MusicSource?,
@@ -121,9 +146,39 @@ sealed class Screen(
             val encodedSmbConfigId = Uri.encode(smbConfigId.orEmpty())
             return "$route?$artistNameArg=$encodedArtistName&$sourceArg=$encodedSource&$smbConfigIdArg=$encodedSmbConfigId"
         }
+
+        fun parseRouteArgs(routeString: String): Args? {
+            val params = parseQueryParams(routeString) ?: return null
+            val artistName = params[artistNameArg] ?: return null
+            val source = params[sourceArg] ?: return null
+            val smbConfigId = params[smbConfigIdArg] ?: ""
+            return Args(artistName, source, smbConfigId)
+        }
     }
 
     companion object {
         val bottomNavItems = listOf(Home, Library)
+
+        /**
+         * Parses query parameters from a route string of the form
+         * `base_route?key1=value1&key2=value2`.
+         * Values are percent-decoded. Returns null if there are no query parameters.
+         */
+        fun parseQueryParams(routeString: String): Map<String, String>? {
+            val query = routeString.substringAfter("?", "").takeIf { it.isNotEmpty() }
+                ?: return null
+            return query.split("&").mapNotNull { param ->
+                val idx = param.indexOf('=')
+                if (idx < 0) null
+                else {
+                    val key = param.substring(0, idx)
+                    // URLDecoder.decode(String, Charset) requires API 26+; using the String
+                    // overload here is safe because "UTF-8" is always supported and never throws.
+                    @Suppress("DEPRECATION")
+                    val value = URLDecoder.decode(param.substring(idx + 1), "UTF-8")
+                    key to value
+                }
+            }.toMap()
+        }
     }
 }

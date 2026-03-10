@@ -40,8 +40,12 @@ fun routeToAppRoute(route: String?): AppRoute? = when {
     route == Screen.Search.route -> SearchRoute
     route == Screen.Settings.route -> SettingsRoute
     route.startsWith(Screen.SmbBrowser.route) -> SmbBrowserRoute
-    route.startsWith(Screen.AlbumDetail.route) -> AlbumDetailRoute("", "", "", "", "")
-    route.startsWith(Screen.ArtistDetail.route) -> ArtistDetailRoute("", "", "")
+    route.startsWith(Screen.AlbumDetail.route) -> Screen.AlbumDetail.parseRouteArgs(route)?.let { args ->
+        AlbumDetailRoute(args.albumName, args.albumArtist, args.source, args.smbConfigId, args.year)
+    }
+    route.startsWith(Screen.ArtistDetail.route) -> Screen.ArtistDetail.parseRouteArgs(route)?.let { args ->
+        ArtistDetailRoute(args.artistName, args.source, args.smbConfigId)
+    }
     else -> null
 }
 
