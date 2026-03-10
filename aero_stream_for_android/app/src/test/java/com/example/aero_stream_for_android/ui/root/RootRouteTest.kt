@@ -2,6 +2,7 @@ package com.example.aero_stream_for_android.ui.root
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -102,6 +103,7 @@ class RootRouteTest {
     fun routeToAppRoute_albumDetail_isBottomNavVisibleAndSelectsLibrary() {
         val route = "album_detail?albumName=Album&albumArtist=Artist&source=LOCAL&smbConfigId=&year="
         val appRoute = routeToAppRoute(route)
+        assertNotNull(appRoute)
         assertTrue(appRoute.isBottomNavVisible())
         assertEquals(RootPrimaryRoute.Library, appRoute.toBottomNavSelectedPrimaryRoute())
     }
@@ -110,6 +112,7 @@ class RootRouteTest {
     fun routeToAppRoute_artistDetail_isBottomNavVisibleAndSelectsLibrary() {
         val route = "artist_detail?artistName=Artist&source=LOCAL&smbConfigId="
         val appRoute = routeToAppRoute(route)
+        assertNotNull(appRoute)
         assertTrue(appRoute.isBottomNavVisible())
         assertEquals(RootPrimaryRoute.Library, appRoute.toBottomNavSelectedPrimaryRoute())
     }
