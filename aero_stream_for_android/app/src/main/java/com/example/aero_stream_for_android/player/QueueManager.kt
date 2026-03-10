@@ -75,8 +75,19 @@ class QueueManager {
 
     fun setShuffle(enabled: Boolean) {
         if (enabled && !isShuffled) {
+            // Read currentSong before flipping the flag so it reads from originalQueue.
+            // If we set isShuffled = true first, currentSong would read from the (still-empty)
+            // shuffledQueue and fail to place the playing song at the front of the shuffle.
+            val current = currentSong
             isShuffled = true
-            reshuffleQueue()
+            shuffledQueue = originalQueue.shuffled()
+            if (current != null) {
+                val mutable = shuffledQueue.toMutableList()
+                mutable.removeAll { it.id == current.id }
+                mutable.add(0, current)
+                shuffledQueue = mutable
+                currentIndex = 0
+            }
         } else if (!enabled && isShuffled) {
             // シャッフル解除：現在再生中の曲をoriginalQueueで探す
             val current = currentSong
