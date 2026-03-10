@@ -173,7 +173,9 @@ sealed class Screen(
                 else {
                     val key = param.substring(0, idx)
                     // URLDecoder.decode(String, Charset) requires API 26+; using the String
-                    // overload here is safe because "UTF-8" is always supported and never throws.
+                    // overload here is fine because "UTF-8" never causes UnsupportedEncodingException.
+                    // Note: malformed percent-encoded sequences (e.g. a bare '%') can still throw
+                    // IllegalArgumentException; route strings produced by Uri.encode() are always well-formed.
                     @Suppress("DEPRECATION")
                     val value = URLDecoder.decode(param.substring(idx + 1), "UTF-8")
                     key to value

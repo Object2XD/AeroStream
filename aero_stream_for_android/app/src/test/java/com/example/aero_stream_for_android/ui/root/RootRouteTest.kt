@@ -87,6 +87,18 @@ class RootRouteTest {
     }
 
     @Test
+    fun routeToAppRoute_artistDetailMissingArtistName_returnsNull() {
+        val route = "artist_detail?source=LOCAL&smbConfigId="
+        assertNull(routeToAppRoute(route))
+    }
+
+    @Test
+    fun routeToAppRoute_artistDetailMissingSource_returnsNull() {
+        val route = "artist_detail?artistName=Artist&smbConfigId="
+        assertNull(routeToAppRoute(route))
+    }
+
+    @Test
     fun routeToAppRoute_albumDetail_isBottomNavVisibleAndSelectsLibrary() {
         val route = "album_detail?albumName=Album&albumArtist=Artist&source=LOCAL&smbConfigId=&year="
         val appRoute = routeToAppRoute(route)
