@@ -102,6 +102,34 @@ class QueueManagerTest {
     }
 
     @Test
+    fun setQueue_whileShuffled_withNewSongs_doesNotInflateQueue() {
+        // Start with an initial queue and enable shuffle
+        queueManager.setQueue(listOf(song(1), song(2), song(3)), startIndex = 1)
+        queueManager.setShuffle(true)
+        // Replace with a completely different set of songs
+        val newSongs = listOf(song(10), song(20), song(30))
+        queueManager.setQueue(newSongs, startIndex = 0)
+        // Queue size must equal the new set size — no inflation from the old current song
+        assertEquals(newSongs.size, queueManager.currentQueue.size)
+        assertTrue(queueManager.currentQueue.containsAll(newSongs))
+        // The song at startIndex should be pinned at index 0 in the shuffled queue
+        assertEquals(song(10), queueManager.currentSong)
+        assertEquals(0, queueManager.currentQueueIndex)
+    }
+
+    @Test
+    fun setQueue_whileShuffled_withStartIndexOutOfBounds_doesNotInflateQueue() {
+        queueManager.setQueue(listOf(song(1), song(2)), startIndex = 0)
+        queueManager.setShuffle(true)
+        // Replace with a new queue but pass an out-of-bounds startIndex
+        val newSongs = listOf(song(10), song(20))
+        queueManager.setQueue(newSongs, startIndex = 5)
+        // Queue must not be inflated
+        assertEquals(newSongs.size, queueManager.currentQueue.size)
+        assertTrue(queueManager.currentQueue.containsAll(newSongs))
+    }
+
+    @Test
     fun setQueue_withValidStartIndex_setsCurrentSong() {
         val songs = listOf(song(1), song(2), song(3))
         queueManager.setQueue(songs, startIndex = 1)

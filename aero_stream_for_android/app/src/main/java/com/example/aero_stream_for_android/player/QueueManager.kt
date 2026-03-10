@@ -33,7 +33,7 @@ class QueueManager {
         originalQueue = songs
         currentIndex = startIndex
         if (isShuffled) {
-            reshuffleQueue()
+            reshuffleQueue(songs.getOrNull(startIndex))
         }
     }
 
@@ -135,10 +135,15 @@ class QueueManager {
             // preserving other songs that share the same ID.
             val indexByReference = mutable.indexOfFirst { it === current }
             val idxToRemove = if (indexByReference >= 0) indexByReference else mutable.indexOfFirst { it.id == current.id }
-            if (idxToRemove >= 0) mutable.removeAt(idxToRemove)
-            mutable.add(0, current)
-            shuffledQueue = mutable
-            currentIndex = 0
+            if (idxToRemove >= 0) {
+                // Current song found — remove it from its shuffled position and pin it at index 0.
+                mutable.removeAt(idxToRemove)
+                mutable.add(0, current)
+                shuffledQueue = mutable
+                currentIndex = 0
+            }
+            // If current is not in originalQueue (e.g. setQueue replaced the queue entirely),
+            // leave shuffledQueue as-is to preserve cardinality. currentIndex is unchanged.
         }
     }
 }
