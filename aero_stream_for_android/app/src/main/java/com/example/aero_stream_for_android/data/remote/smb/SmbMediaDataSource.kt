@@ -347,7 +347,10 @@ class SmbMediaDataSource @Inject constructor(
                 val result = extractSongMetadata(config, file)
                 val song = when (result) {
                     is ScanMetadataResult.Success -> result.song
-                    is ScanMetadataResult.Fallback -> result.song
+                    is ScanMetadataResult.Fallback -> {
+                        accumulator.failedCount++
+                        result.song
+                    }
                     ScanMetadataResult.Error -> {
                         accumulator.failedCount++
                         toSong(file).copy(

@@ -183,7 +183,7 @@ class DownloadWorker @AssistedInject constructor(
                     }
                 }
             } finally {
-                smbFile.close()
+                runCatching { smbFile.close() }
             }
 
             // ダウンロード完了を記録

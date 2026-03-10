@@ -29,20 +29,31 @@ internal class SmbConnectionLifecycle {
             .build()
 
         val client = SMBClient(smbConfig)
-        val connection = client.connect(config.hostname, config.port)
+        var connection: Connection? = null
+        var session: Session? = null
+        var share: DiskShare? = null
+        try {
+            connection = client.connect(config.hostname, config.port)
 
-        val authContext = if (config.username.isNotBlank()) {
-            AuthenticationContext(
-                config.username,
-                config.password.toCharArray(),
-                config.domain.ifBlank { null }
-            )
-        } else {
-            AuthenticationContext.guest()
+            val authContext = if (config.username.isNotBlank()) {
+                AuthenticationContext(
+                    config.username,
+                    config.password.toCharArray(),
+                    config.domain.ifBlank { null }
+                )
+            } else {
+                AuthenticationContext.guest()
+            }
+
+            session = connection.authenticate(authContext)
+            share = session.connectShare(config.shareName) as DiskShare
+        } catch (e: Exception) {
+            runCatching { share?.close() }
+            runCatching { session?.close() }
+            runCatching { connection?.close() }
+            runCatching { client.close() }
+            throw e
         }
-
-        val session = connection.authenticate(authContext)
-        val share = session.connectShare(config.shareName) as DiskShare
 
         entry.client = client
         entry.connection = connection
