@@ -358,16 +358,21 @@ class QueueManagerTest {
     fun removeFromQueue_shuffled_withDuplicateIds_removesAllMatchingFromOriginalQueue() {
         val songA1 = Song(id = 1L, title = "A1", artist = "A", album = "A", duration = 1000L, source = MusicSource.LOCAL)
         val songA2 = Song(id = 1L, title = "A2", artist = "A", album = "A", duration = 2000L, source = MusicSource.LOCAL)
-        val songB  = song(2)
-        queueManager.setQueue(listOf(songA1, songA2, songB), startIndex = 0)
+        val songC  = song(3) // current song has a distinct id — setShuffle won't touch the duplicates
+        queueManager.setQueue(listOf(songA1, songA2, songC), startIndex = 2)
         queueManager.setShuffle(true)
 
-        // Remove whichever song with id=1 appears first in the shuffled queue
+        // Both duplicates survive setShuffle because the current song (songC, id=3) is distinct
+        assertEquals(2, queueManager.currentQueue.count { it.id == 1L })
+
+        // Remove whichever duplicate song appears first in the shuffled queue
         val indexToRemove = queueManager.currentQueue.indexOfFirst { it.id == 1L }
         queueManager.removeFromQueue(indexToRemove)
 
-        // originalQueue.filter removes ALL songs with that id, so both A1 and A2 are gone
+        // originalQueue.filter removes ALL songs with that id; verify by reading the unshuffled queue
+        queueManager.setShuffle(false)
         assertTrue(queueManager.currentQueue.none { it.id == 1L })
+        assertEquals(1, queueManager.currentQueue.size) // only songC remains
     }
 
     // =====================================================================

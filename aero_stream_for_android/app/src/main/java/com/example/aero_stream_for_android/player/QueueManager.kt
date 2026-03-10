@@ -83,7 +83,11 @@ class QueueManager {
             shuffledQueue = originalQueue.shuffled()
             if (current != null) {
                 val mutable = shuffledQueue.toMutableList()
-                mutable.removeAll { it.id == current.id }
+                // Use reference equality first so that only this specific instance is removed,
+                // preserving other songs that share the same ID.
+                val indexByReference = mutable.indexOfFirst { it === current }
+                val idxToRemove = if (indexByReference >= 0) indexByReference else mutable.indexOfFirst { it.id == current.id }
+                if (idxToRemove >= 0) mutable.removeAt(idxToRemove)
                 mutable.add(0, current)
                 shuffledQueue = mutable
                 currentIndex = 0
@@ -139,7 +143,11 @@ class QueueManager {
         if (current != null) {
             // 現在の曲を先頭に持ってくる
             val mutable = shuffledQueue.toMutableList()
-            mutable.removeAll { it.id == current.id }
+            // Use reference equality first so that only this specific instance is removed,
+            // preserving other songs that share the same ID.
+            val indexByReference = mutable.indexOfFirst { it === current }
+            val idxToRemove = if (indexByReference >= 0) indexByReference else mutable.indexOfFirst { it.id == current.id }
+            if (idxToRemove >= 0) mutable.removeAt(idxToRemove)
             mutable.add(0, current)
             shuffledQueue = mutable
             currentIndex = 0
