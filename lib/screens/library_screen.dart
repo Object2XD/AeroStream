@@ -312,10 +312,6 @@ class LibraryScreen extends HookConsumerWidget {
         onOpenAlbum: openAlbum,
         onShowMessage: showMessage,
         onItemBuilt: (index) {
-          final prefetchThreshold = _prefetchThresholdFor(
-            currentTab: currentTab,
-            viewMode: viewMode.value,
-          );
           switch (currentTab) {
             case LibraryTab.songs:
               ref
@@ -324,10 +320,7 @@ class LibraryScreen extends HookConsumerWidget {
                       _songSortForKey(currentSortKey),
                     ).notifier,
                   )
-                  .scheduleLoadMoreIfNeeded(
-                    index,
-                    prefetchThreshold: prefetchThreshold,
-                  );
+                  .scheduleEnsureIndexLoaded(index);
               break;
             case LibraryTab.albums:
               ref
@@ -336,10 +329,7 @@ class LibraryScreen extends HookConsumerWidget {
                       _albumSortForKey(currentSortKey),
                     ).notifier,
                   )
-                  .scheduleLoadMoreIfNeeded(
-                    index,
-                    prefetchThreshold: prefetchThreshold,
-                  );
+                  .scheduleEnsureIndexLoaded(index);
               break;
             case LibraryTab.artists:
               ref
@@ -348,10 +338,7 @@ class LibraryScreen extends HookConsumerWidget {
                       _artistSortForKey(currentSortKey),
                     ).notifier,
                   )
-                  .scheduleLoadMoreIfNeeded(
-                    index,
-                    prefetchThreshold: prefetchThreshold,
-                  );
+                  .scheduleEnsureIndexLoaded(index);
               break;
             case LibraryTab.albumArtists:
               ref
@@ -360,10 +347,7 @@ class LibraryScreen extends HookConsumerWidget {
                       _albumArtistSortForKey(currentSortKey),
                     ).notifier,
                   )
-                  .scheduleLoadMoreIfNeeded(
-                    index,
-                    prefetchThreshold: prefetchThreshold,
-                  );
+                  .scheduleEnsureIndexLoaded(index);
               break;
             case LibraryTab.genres:
               ref
@@ -372,10 +356,7 @@ class LibraryScreen extends HookConsumerWidget {
                       _genreSortForKey(currentSortKey),
                     ).notifier,
                   )
-                  .scheduleLoadMoreIfNeeded(
-                    index,
-                    prefetchThreshold: prefetchThreshold,
-                  );
+                  .scheduleEnsureIndexLoaded(index);
               break;
           }
         },
@@ -844,16 +825,6 @@ class _LibraryProjectionEmptyStateSliver extends StatelessWidget {
       ),
     );
   }
-}
-
-int _prefetchThresholdFor({
-  required LibraryTab currentTab,
-  required LibraryViewMode viewMode,
-}) {
-  if (currentTab == LibraryTab.songs) {
-    return 10;
-  }
-  return viewMode == LibraryViewMode.grid ? 12 : 8;
 }
 
 LibrarySongSort _songSortForKey(LibrarySortKey key) {

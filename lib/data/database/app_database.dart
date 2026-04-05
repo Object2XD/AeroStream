@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../drive/drive_entities.dart';
+import '../drive/drive_scan_backlog.dart';
 import '../drive/drive_scan_models.dart';
 import '../../models/library_models.dart';
 
@@ -311,6 +312,7 @@ class ScanTasks extends Table {
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   IntColumn get priority => integer().withDefault(const Constant(0))();
   DateTimeColumn get lockedAt => dateTime().nullable()();
+  TextColumn get runtimeStage => text().nullable()();
   TextColumn get lastError => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -410,7 +412,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -486,6 +488,9 @@ class AppDatabase extends _$AppDatabase {
             artist_sort = LOWER(TRIM(COALESCE(artist, '')))
           WHERE title_sort IS NULL OR title_sort = '' OR artist_sort IS NULL
         ''');
+      }
+      if (from < 6) {
+        await m.addColumn(scanTasks, scanTasks.runtimeStage);
       }
     },
     beforeOpen: (details) async {
@@ -1124,6 +1129,7 @@ class AppDatabase extends _$AppDatabase {
             table.rootId.isIn(rootIds) &
             table.indexStatus.isNotValue(TrackIndexStatus.removed.value) &
             (table.metadataStatus.equals(TrackMetadataStatus.pending.value) |
+                table.metadataStatus.equals(TrackMetadataStatus.failed.value) |
                 table.metadataStatus.equals(TrackMetadataStatus.stale.value) |
                 (table.metadataStatus.equals(TrackMetadataStatus.ready.value) &
                     table.metadataSchemaVersion.isSmallerThanValue(
@@ -1617,6 +1623,30 @@ class AppDatabase extends _$AppDatabase {
         );
   }
 
+  Future<void> cancelQueuedAndRunningScanTasks(int jobId, {String? kind}) {
+    final now = DateTime.now();
+    final query = update(scanTasks)
+      ..where((table) {
+        final stateFilter = table.state.isIn(<String>[
+          DriveScanTaskState.queued.value,
+          DriveScanTaskState.running.value,
+        ]);
+        final jobFilter = table.jobId.equals(jobId);
+        if (kind == null) {
+          return jobFilter & stateFilter;
+        }
+        return jobFilter & stateFilter & table.kind.equals(kind);
+      });
+    return query.write(
+      ScanTasksCompanion(
+        state: Value(DriveScanTaskState.canceled.value),
+        lockedAt: const Value(null),
+        runtimeStage: const Value(null),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
   Future<void> requeueRunningScanTasks(int jobId) {
     return (update(scanTasks)..where(
           (table) =>
@@ -1627,9 +1657,49 @@ class AppDatabase extends _$AppDatabase {
           ScanTasksCompanion(
             state: Value(DriveScanTaskState.queued.value),
             lockedAt: const Value(null),
+            runtimeStage: const Value(null),
             updatedAt: Value(DateTime.now()),
           ),
         );
+  }
+
+  Future<List<ScanTask>> reclaimStaleRunningScanTasks(
+    int jobId, {
+    required DateTime staleBefore,
+    String? kind,
+  }) async {
+    return transaction(() async {
+      final query = select(scanTasks)
+        ..where(
+          (table) =>
+              table.jobId.equals(jobId) &
+              table.state.equals(DriveScanTaskState.running.value) &
+              table.updatedAt.isSmallerThanValue(staleBefore),
+        )
+        ..orderBy([(table) => OrderingTerm(expression: table.updatedAt)]);
+      if (kind != null) {
+        query.where((table) => table.kind.equals(kind));
+      }
+      final rows = await query.get();
+      if (rows.isEmpty) {
+        return const <ScanTask>[];
+      }
+      await batch((batch) {
+        for (final row in rows) {
+          batch.update(
+            scanTasks,
+            ScanTasksCompanion(
+              state: Value(DriveScanTaskState.queued.value),
+              lockedAt: const Value(null),
+              runtimeStage: const Value(null),
+              updatedAt: Value(DateTime.now()),
+            ),
+            where: (table) => table.id.equals(row.id),
+          );
+        }
+      });
+      return rows;
+    });
   }
 
   Future<void> enqueueScanTasks(List<ScanTasksCompanion> rows) async {
@@ -1645,6 +1715,61 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
     });
+  }
+
+  Future<int> rebalanceQueuedExtractTagsTaskPriorities(
+    int jobId, {
+    required int normalPriority,
+    required int repairPriority,
+  }) async {
+    final now = DateTime.now();
+    final queuedState = DriveScanTaskState.queued.value;
+    final extractTagsKind = DriveScanTaskKind.extractTags.value;
+    final repairMarker = 'repairSchemaVersion';
+
+    final updatedRepairCount = await customUpdate(
+      '''
+      UPDATE scan_tasks
+      SET priority = ?, updated_at = ?
+      WHERE job_id = ?
+        AND kind = ?
+        AND state = ?
+        AND instr(payload_json, ?) > 0
+        AND priority != ?
+      ''',
+      variables: [
+        Variable.withInt(repairPriority),
+        Variable.withDateTime(now),
+        Variable.withInt(jobId),
+        Variable.withString(extractTagsKind),
+        Variable.withString(queuedState),
+        Variable.withString(repairMarker),
+        Variable.withInt(repairPriority),
+      ],
+      updates: {scanTasks},
+    );
+    final updatedNormalCount = await customUpdate(
+      '''
+      UPDATE scan_tasks
+      SET priority = ?, updated_at = ?
+      WHERE job_id = ?
+        AND kind = ?
+        AND state = ?
+        AND instr(payload_json, ?) = 0
+        AND priority != ?
+      ''',
+      variables: [
+        Variable.withInt(normalPriority),
+        Variable.withDateTime(now),
+        Variable.withInt(jobId),
+        Variable.withString(extractTagsKind),
+        Variable.withString(queuedState),
+        Variable.withString(repairMarker),
+        Variable.withInt(normalPriority),
+      ],
+      updates: {scanTasks},
+    );
+    return updatedRepairCount + updatedNormalCount;
   }
 
   Future<List<ScanTask>> takeQueuedScanTasks(
@@ -1683,6 +1808,7 @@ class AppDatabase extends _$AppDatabase {
             ScanTasksCompanion(
               state: Value(DriveScanTaskState.running.value),
               lockedAt: Value(now),
+              runtimeStage: const Value(null),
               updatedAt: Value(now),
             ),
             where: (table) => table.id.equals(row.id),
@@ -1695,6 +1821,7 @@ class AppDatabase extends _$AppDatabase {
             (row) => row.copyWith(
               state: DriveScanTaskState.running.value,
               lockedAt: Value(now),
+              runtimeStage: const Value(null),
               updatedAt: now,
             ),
           )
@@ -1710,6 +1837,7 @@ class AppDatabase extends _$AppDatabase {
     await (update(scanTasks)..where((table) => table.id.isIn(ids))).write(
       ScanTasksCompanion(
         state: Value(DriveScanTaskState.completed.value),
+        runtimeStage: const Value(null),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -1726,10 +1854,47 @@ class AppDatabase extends _$AppDatabase {
     await (update(scanTasks)..where((table) => table.id.isIn(ids))).write(
       ScanTasksCompanion(
         state: Value(DriveScanTaskState.failed.value),
+        runtimeStage: const Value(null),
         lastError: Value(error),
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  Future<void> updateScanTaskRuntimeState(
+    int taskId, {
+    required String? runtimeStageValue,
+    DateTime? heartbeatAt,
+  }) {
+    final timestamp = heartbeatAt ?? DateTime.now();
+    return (update(scanTasks)..where((table) => table.id.equals(taskId))).write(
+      ScanTasksCompanion(
+        runtimeStage: Value(runtimeStageValue),
+        updatedAt: Value(timestamp),
+      ),
+    );
+  }
+
+  Future<void> updateScanTaskRuntimeStates(
+    Map<int, String?> runtimeStageByTaskId, {
+    DateTime? heartbeatAt,
+  }) async {
+    if (runtimeStageByTaskId.isEmpty) {
+      return;
+    }
+    final timestamp = heartbeatAt ?? DateTime.now();
+    await batch((batch) {
+      for (final entry in runtimeStageByTaskId.entries) {
+        batch.update(
+          scanTasks,
+          ScanTasksCompanion(
+            runtimeStage: Value(entry.value),
+            updatedAt: Value(timestamp),
+          ),
+          where: (table) => table.id.equals(entry.key),
+        );
+      }
+    });
   }
 
   Future<int> countQueuedScanTasks(
@@ -1760,6 +1925,76 @@ class AppDatabase extends _$AppDatabase {
     return row.read<int>('count');
   }
 
+  Future<ScanTaskBacklogEntry> getScanTaskBacklogEntry(
+    int jobId, {
+    required String kind,
+  }) async {
+    final rows = await customSelect(
+      '''
+      SELECT state, COUNT(*) AS count
+      FROM scan_tasks
+      WHERE job_id = ?
+        AND kind = ?
+      GROUP BY state
+      ''',
+      variables: <Variable<Object>>[
+        Variable.withInt(jobId),
+        Variable.withString(kind),
+      ],
+      readsFrom: {scanTasks},
+    ).get();
+
+    var queued = 0;
+    var running = 0;
+    var failed = 0;
+    for (final row in rows) {
+      final state = row.read<String>('state');
+      final count = row.read<int>('count');
+      switch (state) {
+        case 'queued':
+          queued += count;
+        case 'running':
+          running += count;
+        case 'failed':
+          failed += count;
+      }
+    }
+
+    return ScanTaskBacklogEntry(
+      queuedCount: queued,
+      runningCount: running,
+      failedCount: failed,
+    );
+  }
+
+  Future<ScanPipelineBacklog> getScanPipelineBacklog(int jobId) async {
+    final rows = await customSelect(
+      '''
+      SELECT kind, state, COUNT(*) AS count
+      FROM scan_tasks
+      WHERE job_id = ?
+      GROUP BY kind, state
+      ''',
+      variables: <Variable<Object>>[Variable.withInt(jobId)],
+      readsFrom: {scanTasks},
+    ).get();
+    return _mapScanPipelineBacklogRows(rows);
+  }
+
+  Stream<ScanPipelineBacklog> watchScanPipelineBacklog(int jobId) {
+    return customSelect(
+      '''
+      SELECT kind, state, COUNT(*) AS count
+      FROM scan_tasks
+      WHERE job_id = ?
+      GROUP BY kind, state
+      ORDER BY kind, state
+      ''',
+      variables: <Variable<Object>>[Variable.withInt(jobId)],
+      readsFrom: {scanTasks},
+    ).watch().map(_mapScanPipelineBacklogRows).distinct();
+  }
+
   Future<List<ScanTask>> getFailedScanTasks(int jobId) {
     return (select(scanTasks)..where(
           (table) =>
@@ -1767,6 +2002,119 @@ class AppDatabase extends _$AppDatabase {
               table.state.equals(DriveScanTaskState.failed.value),
         ))
         .get();
+  }
+
+  ScanPipelineBacklog _mapScanPipelineBacklogRows(List<QueryRow> rows) {
+    return _buildScanPipelineBacklog(
+      rows.map(
+        (row) => (
+          row.read<String>('kind'),
+          row.read<String>('state'),
+          row.read<int>('count'),
+        ),
+      ),
+    );
+  }
+
+  ScanPipelineBacklog _buildScanPipelineBacklog(
+    Iterable<(String, String, int)> rows,
+  ) {
+    var discoveryQueued = 0;
+    var discoveryRunning = 0;
+    var discoveryFailed = 0;
+    var changesQueued = 0;
+    var changesRunning = 0;
+    var changesFailed = 0;
+    var metadataQueued = 0;
+    var metadataRunning = 0;
+    var metadataFailed = 0;
+    var artworkQueued = 0;
+    var artworkRunning = 0;
+    var artworkFailed = 0;
+    var deleteQueued = 0;
+    var deleteRunning = 0;
+    var deleteFailed = 0;
+
+    for (final row in rows) {
+      final kind = row.$1;
+      final state = row.$2;
+      final count = row.$3;
+      switch (kind) {
+        case 'discover_folder':
+          switch (state) {
+            case 'queued':
+              discoveryQueued += count;
+            case 'running':
+              discoveryRunning += count;
+            case 'failed':
+              discoveryFailed += count;
+          }
+        case 'reconcile_change':
+          switch (state) {
+            case 'queued':
+              changesQueued += count;
+            case 'running':
+              changesRunning += count;
+            case 'failed':
+              changesFailed += count;
+          }
+        case 'extract_tags':
+          switch (state) {
+            case 'queued':
+              metadataQueued += count;
+            case 'running':
+              metadataRunning += count;
+            case 'failed':
+              metadataFailed += count;
+          }
+        case 'extract_artwork':
+          switch (state) {
+            case 'queued':
+              artworkQueued += count;
+            case 'running':
+              artworkRunning += count;
+            case 'failed':
+              artworkFailed += count;
+          }
+        case 'delete_projection':
+          switch (state) {
+            case 'queued':
+              deleteQueued += count;
+            case 'running':
+              deleteRunning += count;
+            case 'failed':
+              deleteFailed += count;
+          }
+      }
+    }
+
+    return ScanPipelineBacklog(
+      discovery: ScanTaskBacklogEntry(
+        queuedCount: discoveryQueued,
+        runningCount: discoveryRunning,
+        failedCount: discoveryFailed,
+      ),
+      changes: ScanTaskBacklogEntry(
+        queuedCount: changesQueued,
+        runningCount: changesRunning,
+        failedCount: changesFailed,
+      ),
+      metadata: ScanTaskBacklogEntry(
+        queuedCount: metadataQueued,
+        runningCount: metadataRunning,
+        failedCount: metadataFailed,
+      ),
+      artwork: ScanTaskBacklogEntry(
+        queuedCount: artworkQueued,
+        runningCount: artworkRunning,
+        failedCount: artworkFailed,
+      ),
+      deleteProjection: ScanTaskBacklogEntry(
+        queuedCount: deleteQueued,
+        runningCount: deleteRunning,
+        failedCount: deleteFailed,
+      ),
+    );
   }
 
   Future<int> upsertArtworkBlob(ArtworkBlobsCompanion row) {

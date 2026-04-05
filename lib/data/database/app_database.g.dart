@@ -3503,7 +3503,7 @@ class $LibraryProjectionMetasTable extends LibraryProjectionMetas
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: Constant(LibraryProjectionBackfillState.pending.name),
+    defaultValue: const Constant('pending'),
   );
   static const VerificationMeta _lastBackfillAtMeta = const VerificationMeta(
     'lastBackfillAt',
@@ -7487,6 +7487,17 @@ class $ScanTasksTable extends ScanTasks
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _runtimeStageMeta = const VerificationMeta(
+    'runtimeStage',
+  );
+  @override
+  late final GeneratedColumn<String> runtimeStage = GeneratedColumn<String>(
+    'runtime_stage',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _lastErrorMeta = const VerificationMeta(
     'lastError',
   );
@@ -7535,6 +7546,7 @@ class $ScanTasksTable extends ScanTasks
     attempts,
     priority,
     lockedAt,
+    runtimeStage,
     lastError,
     createdAt,
     updatedAt,
@@ -7624,6 +7636,15 @@ class $ScanTasksTable extends ScanTasks
         lockedAt.isAcceptableOrUnknown(data['locked_at']!, _lockedAtMeta),
       );
     }
+    if (data.containsKey('runtime_stage')) {
+      context.handle(
+        _runtimeStageMeta,
+        runtimeStage.isAcceptableOrUnknown(
+          data['runtime_stage']!,
+          _runtimeStageMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_error')) {
       context.handle(
         _lastErrorMeta,
@@ -7699,6 +7720,10 @@ class $ScanTasksTable extends ScanTasks
         DriftSqlType.dateTime,
         data['${effectivePrefix}locked_at'],
       ),
+      runtimeStage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}runtime_stage'],
+      ),
       lastError: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}last_error'],
@@ -7732,6 +7757,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
   final int attempts;
   final int priority;
   final DateTime? lockedAt;
+  final String? runtimeStage;
   final String? lastError;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -7747,6 +7773,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
     required this.attempts,
     required this.priority,
     this.lockedAt,
+    this.runtimeStage,
     this.lastError,
     required this.createdAt,
     required this.updatedAt,
@@ -7772,6 +7799,9 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
     map['priority'] = Variable<int>(priority);
     if (!nullToAbsent || lockedAt != null) {
       map['locked_at'] = Variable<DateTime>(lockedAt);
+    }
+    if (!nullToAbsent || runtimeStage != null) {
+      map['runtime_stage'] = Variable<String>(runtimeStage);
     }
     if (!nullToAbsent || lastError != null) {
       map['last_error'] = Variable<String>(lastError);
@@ -7802,6 +7832,9 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
       lockedAt: lockedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lockedAt),
+      runtimeStage: runtimeStage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(runtimeStage),
       lastError: lastError == null && nullToAbsent
           ? const Value.absent()
           : Value(lastError),
@@ -7827,6 +7860,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
       attempts: serializer.fromJson<int>(json['attempts']),
       priority: serializer.fromJson<int>(json['priority']),
       lockedAt: serializer.fromJson<DateTime?>(json['lockedAt']),
+      runtimeStage: serializer.fromJson<String?>(json['runtimeStage']),
       lastError: serializer.fromJson<String?>(json['lastError']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -7847,6 +7881,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
       'attempts': serializer.toJson<int>(attempts),
       'priority': serializer.toJson<int>(priority),
       'lockedAt': serializer.toJson<DateTime?>(lockedAt),
+      'runtimeStage': serializer.toJson<String?>(runtimeStage),
       'lastError': serializer.toJson<String?>(lastError),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -7865,6 +7900,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
     int? attempts,
     int? priority,
     Value<DateTime?> lockedAt = const Value.absent(),
+    Value<String?> runtimeStage = const Value.absent(),
     Value<String?> lastError = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -7882,6 +7918,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
     attempts: attempts ?? this.attempts,
     priority: priority ?? this.priority,
     lockedAt: lockedAt.present ? lockedAt.value : this.lockedAt,
+    runtimeStage: runtimeStage.present ? runtimeStage.value : this.runtimeStage,
     lastError: lastError.present ? lastError.value : this.lastError,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -7903,6 +7940,9 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
       attempts: data.attempts.present ? data.attempts.value : this.attempts,
       priority: data.priority.present ? data.priority.value : this.priority,
       lockedAt: data.lockedAt.present ? data.lockedAt.value : this.lockedAt,
+      runtimeStage: data.runtimeStage.present
+          ? data.runtimeStage.value
+          : this.runtimeStage,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -7923,6 +7963,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
           ..write('attempts: $attempts, ')
           ..write('priority: $priority, ')
           ..write('lockedAt: $lockedAt, ')
+          ..write('runtimeStage: $runtimeStage, ')
           ..write('lastError: $lastError, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -7943,6 +7984,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
     attempts,
     priority,
     lockedAt,
+    runtimeStage,
     lastError,
     createdAt,
     updatedAt,
@@ -7962,6 +8004,7 @@ class ScanTask extends DataClass implements Insertable<ScanTask> {
           other.attempts == this.attempts &&
           other.priority == this.priority &&
           other.lockedAt == this.lockedAt &&
+          other.runtimeStage == this.runtimeStage &&
           other.lastError == this.lastError &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -7979,6 +8022,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
   final Value<int> attempts;
   final Value<int> priority;
   final Value<DateTime?> lockedAt;
+  final Value<String?> runtimeStage;
   final Value<String?> lastError;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -7994,6 +8038,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
     this.attempts = const Value.absent(),
     this.priority = const Value.absent(),
     this.lockedAt = const Value.absent(),
+    this.runtimeStage = const Value.absent(),
     this.lastError = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -8010,6 +8055,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
     this.attempts = const Value.absent(),
     this.priority = const Value.absent(),
     this.lockedAt = const Value.absent(),
+    this.runtimeStage = const Value.absent(),
     this.lastError = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -8027,6 +8073,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
     Expression<int>? attempts,
     Expression<int>? priority,
     Expression<DateTime>? lockedAt,
+    Expression<String>? runtimeStage,
     Expression<String>? lastError,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -8043,6 +8090,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
       if (attempts != null) 'attempts': attempts,
       if (priority != null) 'priority': priority,
       if (lockedAt != null) 'locked_at': lockedAt,
+      if (runtimeStage != null) 'runtime_stage': runtimeStage,
       if (lastError != null) 'last_error': lastError,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -8061,6 +8109,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
     Value<int>? attempts,
     Value<int>? priority,
     Value<DateTime?>? lockedAt,
+    Value<String?>? runtimeStage,
     Value<String?>? lastError,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -8077,6 +8126,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
       attempts: attempts ?? this.attempts,
       priority: priority ?? this.priority,
       lockedAt: lockedAt ?? this.lockedAt,
+      runtimeStage: runtimeStage ?? this.runtimeStage,
       lastError: lastError ?? this.lastError,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -8119,6 +8169,9 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
     if (lockedAt.present) {
       map['locked_at'] = Variable<DateTime>(lockedAt.value);
     }
+    if (runtimeStage.present) {
+      map['runtime_stage'] = Variable<String>(runtimeStage.value);
+    }
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
@@ -8145,6 +8198,7 @@ class ScanTasksCompanion extends UpdateCompanion<ScanTask> {
           ..write('attempts: $attempts, ')
           ..write('priority: $priority, ')
           ..write('lockedAt: $lockedAt, ')
+          ..write('runtimeStage: $runtimeStage, ')
           ..write('lastError: $lastError, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -13412,6 +13466,7 @@ typedef $$ScanTasksTableCreateCompanionBuilder =
       Value<int> attempts,
       Value<int> priority,
       Value<DateTime?> lockedAt,
+      Value<String?> runtimeStage,
       Value<String?> lastError,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -13429,6 +13484,7 @@ typedef $$ScanTasksTableUpdateCompanionBuilder =
       Value<int> attempts,
       Value<int> priority,
       Value<DateTime?> lockedAt,
+      Value<String?> runtimeStage,
       Value<String?> lastError,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -13512,6 +13568,11 @@ class $$ScanTasksTableFilterComposer
 
   ColumnFilters<DateTime> get lockedAt => $composableBuilder(
     column: $table.lockedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get runtimeStage => $composableBuilder(
+    column: $table.runtimeStage,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13613,6 +13674,11 @@ class $$ScanTasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get runtimeStage => $composableBuilder(
+    column: $table.runtimeStage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get lastError => $composableBuilder(
     column: $table.lastError,
     builder: (column) => ColumnOrderings(column),
@@ -13695,6 +13761,11 @@ class $$ScanTasksTableAnnotationComposer
   GeneratedColumn<DateTime> get lockedAt =>
       $composableBuilder(column: $table.lockedAt, builder: (column) => column);
 
+  GeneratedColumn<String> get runtimeStage => $composableBuilder(
+    column: $table.runtimeStage,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
 
@@ -13767,6 +13838,7 @@ class $$ScanTasksTableTableManager
                 Value<int> attempts = const Value.absent(),
                 Value<int> priority = const Value.absent(),
                 Value<DateTime?> lockedAt = const Value.absent(),
+                Value<String?> runtimeStage = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -13782,6 +13854,7 @@ class $$ScanTasksTableTableManager
                 attempts: attempts,
                 priority: priority,
                 lockedAt: lockedAt,
+                runtimeStage: runtimeStage,
                 lastError: lastError,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -13799,6 +13872,7 @@ class $$ScanTasksTableTableManager
                 Value<int> attempts = const Value.absent(),
                 Value<int> priority = const Value.absent(),
                 Value<DateTime?> lockedAt = const Value.absent(),
+                Value<String?> runtimeStage = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -13814,6 +13888,7 @@ class $$ScanTasksTableTableManager
                 attempts: attempts,
                 priority: priority,
                 lockedAt: lockedAt,
+                runtimeStage: runtimeStage,
                 lastError: lastError,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

@@ -1,0 +1,1 @@
+enum AudioExtractionCostClass { light, exploratory }

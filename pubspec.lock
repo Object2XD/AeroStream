@@ -26,7 +26,7 @@ packages:
     source: hosted
     version: "4.0.9"
   args:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: args
       sha256: d0481093c50b1da8910eb0bb301626d4d8eb7284aa739614d2b394ee09e3ea04
@@ -1142,7 +1142,7 @@ packages:
     source: hosted
     version: "0.7.0+eol"
   sqlite3:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: sqlite3
       sha256: caa693ad15a587a2b4fde093b728131a1827903872171089dedb16f7665d3a91

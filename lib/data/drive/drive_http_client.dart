@@ -32,11 +32,15 @@ class DriveHttpClient {
         pageSize: 1000,
       );
       folders.addAll(
-        page.items.where((entry) => entry.isFolder).map(
+        page.items
+            .where((entry) => entry.isFolder)
+            .map(
               (entry) => DriveFolderEntry(
                 id: entry.id,
                 name: entry.name,
-                parentId: entry.parentIds.isEmpty ? null : entry.parentIds.first,
+                parentId: entry.parentIds.isEmpty
+                    ? null
+                    : entry.parentIds.first,
               ),
             ),
       );
@@ -102,7 +106,9 @@ class DriveHttpClient {
     );
   }
 
-  Future<List<DriveFileEntry>> listAudioFilesRecursively(String parentId) async {
+  Future<List<DriveFileEntry>> listAudioFilesRecursively(
+    String parentId,
+  ) async {
     final queue = <String>[parentId];
     final results = <DriveFileEntry>[];
 
@@ -148,9 +154,7 @@ class DriveHttpClient {
     return _getJson(
       '/files/$folderId',
       operation: 'folder_metadata_request',
-      queryParameters: const <String, String>{
-        'fields': 'id,name,parents',
-      },
+      queryParameters: const <String, String>{'fields': 'id,name,parents'},
       details: <String, Object?>{'folderId': folderId},
     );
   }
@@ -175,7 +179,9 @@ class DriveHttpClient {
         context: DriveScanLogContext(elapsedMs: stopwatch.elapsedMilliseconds),
         message: 'Drive changes start page token is missing.',
       );
-      throw const DriveAuthException('Drive changes start page token is missing.');
+      throw const DriveAuthException(
+        'Drive changes start page token is missing.',
+      );
     }
     _logger.info(
       prefix: 'DriveHTTP',
@@ -196,10 +202,7 @@ class DriveHttpClient {
       prefix: 'DriveHTTP',
       subsystem: 'http',
       operation: 'changes_list_start',
-      details: <String, Object?>{
-        'pageToken': pageToken,
-        'pageSize': pageSize,
-      },
+      details: <String, Object?>{'pageToken': pageToken, 'pageSize': pageSize},
     );
     final json = await _getJson(
       '/changes',
@@ -214,10 +217,7 @@ class DriveHttpClient {
         'fields':
             'changes(fileId,removed,file(id,name,mimeType,modifiedTime,resourceKey,size,md5Checksum,parents,trashed)),nextPageToken,newStartPageToken',
       },
-      details: <String, Object?>{
-        'pageToken': pageToken,
-        'pageSize': pageSize,
-      },
+      details: <String, Object?>{'pageToken': pageToken, 'pageSize': pageSize},
     );
 
     final changes = (json['changes'] as List<dynamic>? ?? const [])
@@ -257,16 +257,6 @@ class DriveHttpClient {
     String? rangeHeader,
   }) async {
     final stopwatch = Stopwatch()..start();
-    _logger.info(
-      prefix: 'DriveHTTP',
-      subsystem: 'http',
-      operation: 'download_file_start',
-      context: DriveScanLogContext(driveFileId: fileId),
-      details: <String, Object?>{
-        'rangeHeader': rangeHeader,
-        'resourceKey': resourceKey,
-      },
-    );
     try {
       final response = await _authRepository.withClient((client) async {
         final uri = Uri.parse('$_apiBase/files/$fileId').replace(
@@ -282,19 +272,6 @@ class DriveHttpClient {
         }
         return client.send(request);
       });
-      _logger.info(
-        prefix: 'DriveHTTP',
-        subsystem: 'http',
-        operation: 'download_file_response',
-        context: DriveScanLogContext(
-          driveFileId: fileId,
-          elapsedMs: stopwatch.elapsedMilliseconds,
-        ),
-        details: <String, Object?>{
-          'statusCode': response.statusCode,
-          'rangeHeader': rangeHeader,
-        },
-      );
       return response;
     } catch (error, stackTrace) {
       _logger.error(
@@ -356,19 +333,6 @@ class DriveHttpClient {
       builder.add(chunk);
     }
     final bytes = builder.takeBytes();
-    _logger.info(
-      prefix: 'DriveHTTP',
-      subsystem: 'http',
-      operation: 'download_bytes_success',
-      context: DriveScanLogContext(
-        driveFileId: fileId,
-        elapsedMs: stopwatch.elapsedMilliseconds,
-      ),
-      details: <String, Object?>{
-        'byteCount': bytes.length,
-        'rangeHeader': rangeHeader,
-      },
-    );
     return bytes;
   }
 
@@ -401,7 +365,9 @@ class DriveHttpClient {
           prefix: 'DriveHTTP',
           subsystem: 'http',
           operation: '${operation}_fail',
-          context: DriveScanLogContext(elapsedMs: stopwatch.elapsedMilliseconds),
+          context: DriveScanLogContext(
+            elapsedMs: stopwatch.elapsedMilliseconds,
+          ),
           details: <String, Object?>{
             ...details,
             'statusCode': response.statusCode,
@@ -450,10 +416,7 @@ class DriveHttpClient {
     );
   }
 
-  bool _isAudioFile({
-    required String name,
-    required String mimeType,
-  }) {
+  bool _isAudioFile({required String name, required String mimeType}) {
     if (mimeType.startsWith('audio/')) {
       return true;
     }

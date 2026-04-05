@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../media_extraction/mp3/parse/mp3_tag_parser.dart';
 import 'legacy_text_decoder.dart';
 
 class ParsedTagData {
@@ -39,6 +40,7 @@ class ParsedTagData {
       year != null ||
       trackNumber != null ||
       discNumber != null ||
+      durationMs != null ||
       artworkBytes != null;
 
   ParsedTagData merge(ParsedTagData other) {
@@ -66,140 +68,70 @@ class DriveEmbeddedTagParser {
     required Uint8List tailBytes,
     required String mimeType,
     required String fileName,
+    int? fileSize,
+    bool includeArtwork = true,
   }) {
     final lowerName = fileName.toLowerCase();
     if (mimeType == 'audio/mpeg' || lowerName.endsWith('.mp3')) {
-      return _parseMp3(headBytes, tailBytes);
+      return _parseMp3WithSharedParser(
+        headBytes,
+        tailBytes,
+        includeArtwork: includeArtwork,
+      );
     }
     if (mimeType == 'audio/flac' || lowerName.endsWith('.flac')) {
-      return _parseFlac(headBytes);
+      return _parseFlac(headBytes, includeArtwork: includeArtwork);
     }
     if (mimeType == 'audio/wav' ||
         mimeType == 'audio/x-wav' ||
         lowerName.endsWith('.wav')) {
       return _parseWav(headBytes);
     }
+    if (mimeType == 'audio/mp4' ||
+        mimeType == 'audio/x-m4a' ||
+        lowerName.endsWith('.m4a') ||
+        lowerName.endsWith('.mp4')) {
+      return _parseMp4(
+        headBytes,
+        tailBytes,
+        fileSize: fileSize,
+        includeArtwork: includeArtwork,
+      );
+    }
     return null;
   }
 
-  static ParsedTagData? _parseMp3(Uint8List headBytes, Uint8List tailBytes) {
-    ParsedTagData? result;
-    if (headBytes.length >= 10 &&
-        ascii.decode(headBytes.sublist(0, 3), allowInvalid: true) == 'ID3') {
-      final tagSize = _readSynchsafeInt(headBytes, 6);
-      final available = headBytes.length >= tagSize + 10
-          ? tagSize + 10
-          : headBytes.length;
-      var offset = 10;
-      ParsedTagData parsed = const ParsedTagData();
-
-      while (offset + 10 <= available) {
-        final frameId = ascii.decode(
-          headBytes.sublist(offset, offset + 4),
-          allowInvalid: true,
-        );
-        if (frameId.trim().isEmpty || frameId == '\u0000\u0000\u0000\u0000') {
-          break;
-        }
-
-        final frameSize = _readUint32(headBytes, offset + 4);
-        if (frameSize <= 0 || offset + 10 + frameSize > available) {
-          break;
-        }
-
-        final frameData = headBytes.sublist(
-          offset + 10,
-          offset + 10 + frameSize,
-        );
-        parsed = parsed.merge(_parseId3Frame(frameId, frameData));
-        offset += 10 + frameSize;
-      }
-
-      if (parsed.hasAnyTag) {
-        result = parsed;
-      }
-    }
-
-    if (tailBytes.length >= 128) {
-      final last128 = tailBytes.sublist(tailBytes.length - 128);
-      if (ascii.decode(last128.sublist(0, 3), allowInvalid: true) == 'TAG') {
-        final fallback = ParsedTagData(
-          title: _trimLegacyText(last128.sublist(3, 33)),
-          artist: _trimLegacyText(last128.sublist(33, 63)),
-          album: _trimLegacyText(last128.sublist(63, 93)),
-          year: int.tryParse(_trimLegacyText(last128.sublist(93, 97)) ?? ''),
-          genre: null,
-          trackNumber: last128[125] == 0 ? last128[126] : null,
-        );
-        result = (result ?? const ParsedTagData()).merge(fallback);
-      }
-    }
-
-    return result;
-  }
-
-  static ParsedTagData _parseId3Frame(String frameId, Uint8List frameData) {
-    if (frameData.isEmpty) {
-      return const ParsedTagData();
-    }
-
-    switch (frameId) {
-      case 'TIT2':
-        return ParsedTagData(title: _decodeId3Text(frameData));
-      case 'TPE1':
-        return ParsedTagData(artist: _decodeId3Text(frameData));
-      case 'TALB':
-        return ParsedTagData(album: _decodeId3Text(frameData));
-      case 'TPE2':
-        return ParsedTagData(albumArtist: _decodeId3Text(frameData));
-      case 'TCON':
-        return ParsedTagData(genre: _decodeId3Text(frameData));
-      case 'TRCK':
-        return ParsedTagData(
-          trackNumber: _parseLeadingInt(_decodeId3Text(frameData)),
-        );
-      case 'TPOS':
-        return ParsedTagData(
-          discNumber: _parseLeadingInt(_decodeId3Text(frameData)),
-        );
-      case 'TDRC':
-      case 'TYER':
-        return ParsedTagData(year: _parseLeadingInt(_decodeId3Text(frameData)));
-      case 'APIC':
-        return _parseApic(frameData);
-      default:
-        return const ParsedTagData();
-    }
-  }
-
-  static ParsedTagData _parseApic(Uint8List frameData) {
-    final encoding = frameData[0];
-    var offset = 1;
-    while (offset < frameData.length && frameData[offset] != 0) {
-      offset++;
-    }
-    final mimeType = ascii.decode(
-      frameData.sublist(1, offset),
-      allowInvalid: true,
+  static ParsedTagData? _parseMp3WithSharedParser(
+    Uint8List headBytes,
+    Uint8List tailBytes, {
+    required bool includeArtwork,
+  }) {
+    final parsed = Mp3TagParser.parse(
+      headBytes: headBytes,
+      tailBytes: tailBytes,
+      includeArtwork: includeArtwork,
     );
-    offset++;
-    if (offset >= frameData.length) {
-      return const ParsedTagData();
-    }
-    offset++;
-    final descriptionEnd = _findTerminator(frameData, offset, encoding);
-    offset = descriptionEnd;
-    final artwork = frameData.sublist(offset);
-    if (artwork.isEmpty) {
-      return const ParsedTagData();
+    if (parsed == null || !parsed.hasAnyData) {
+      return null;
     }
     return ParsedTagData(
-      artworkBytes: Uint8List.fromList(artwork),
-      artworkMimeType: mimeType.isEmpty ? 'image/jpeg' : mimeType,
+      title: parsed.title,
+      artist: parsed.artist,
+      album: parsed.album,
+      albumArtist: parsed.albumArtist,
+      genre: parsed.genre,
+      year: parsed.year,
+      trackNumber: parsed.trackNumber,
+      discNumber: parsed.discNumber,
+      artworkBytes: parsed.artworkBytes,
+      artworkMimeType: parsed.artworkMimeType,
     );
   }
 
-  static ParsedTagData? _parseFlac(Uint8List headBytes) {
+  static ParsedTagData? _parseFlac(
+    Uint8List headBytes, {
+    required bool includeArtwork,
+  }) {
     if (headBytes.length < 4 ||
         ascii.decode(headBytes.sublist(0, 4), allowInvalid: true) != 'fLaC') {
       return null;
@@ -227,7 +159,9 @@ class DriveEmbeddedTagParser {
           result = result.merge(_parseVorbisComment(block));
           break;
         case 6:
-          result = result.merge(_parseFlacPicture(block));
+          if (includeArtwork) {
+            result = result.merge(_parseFlacPicture(block));
+          }
           break;
         default:
           break;
@@ -377,6 +311,376 @@ class DriveEmbeddedTagParser {
     return result.hasAnyTag ? result : null;
   }
 
+  static ParsedTagData? _parseMp4(
+    Uint8List headBytes,
+    Uint8List tailBytes, {
+    required int? fileSize,
+    required bool includeArtwork,
+  }) {
+    final resolvedFileSize = fileSize ?? headBytes.length;
+    if (resolvedFileSize <= 0) {
+      return null;
+    }
+
+    final tailStart = tailBytes.isEmpty
+        ? resolvedFileSize
+        : resolvedFileSize - tailBytes.length;
+    final view = _SegmentedFileView(
+      fileSize: resolvedFileSize,
+      segments: <_ByteSegment>[
+        _ByteSegment(fileOffset: 0, bytes: headBytes),
+        if (tailBytes.isNotEmpty && tailStart >= headBytes.length)
+          _ByteSegment(fileOffset: tailStart, bytes: tailBytes),
+      ],
+    );
+    final moovBox = view.findTopLevelBox('moov');
+    if (moovBox == null) {
+      return null;
+    }
+    final moovBytes = view.read(moovBox.offset, moovBox.size);
+    if (moovBytes == null) {
+      return null;
+    }
+    return _parseMp4Moov(moovBytes, includeArtwork: includeArtwork);
+  }
+
+  static ParsedTagData? _parseMp4Moov(
+    Uint8List moovBytes, {
+    required bool includeArtwork,
+  }) {
+    ParsedTagData result = const ParsedTagData();
+    var durationMs = _findMp4Duration(
+      moovBytes,
+      start: 8,
+      end: moovBytes.length,
+    );
+
+    void walk(int start, int end) {
+      var offset = start;
+      while (offset < end) {
+        final box = _readMp4Box(moovBytes, offset, end);
+        if (box == null) {
+          break;
+        }
+        switch (box.type) {
+          case 'mvhd':
+            durationMs ??= _parseMvhdDuration(moovBytes, box);
+            break;
+          case 'trak':
+          case 'mdia':
+          case 'udta':
+          case 'moov':
+            walk(box.dataOffset, box.end);
+            break;
+          case 'meta':
+            walk(box.dataOffset + 4, box.end);
+            break;
+          case 'ilst':
+            result = result.merge(
+              _parseMp4Ilst(
+                moovBytes,
+                start: box.dataOffset,
+                end: box.end,
+                includeArtwork: includeArtwork,
+              ),
+            );
+            break;
+          default:
+            break;
+        }
+        offset = box.end;
+      }
+    }
+
+    walk(8, moovBytes.length);
+    if (durationMs != null) {
+      result = result.merge(ParsedTagData(durationMs: durationMs));
+    }
+    return result.hasAnyTag ? result : null;
+  }
+
+  static ParsedTagData _parseMp4Ilst(
+    Uint8List bytes, {
+    required int start,
+    required int end,
+    required bool includeArtwork,
+  }) {
+    ParsedTagData result = const ParsedTagData();
+    var offset = start;
+    while (offset < end) {
+      final item = _readMp4Box(bytes, offset, end);
+      if (item == null) {
+        break;
+      }
+      result = result.merge(
+        _parseMp4MetadataItem(bytes, item, includeArtwork: includeArtwork),
+      );
+      offset = item.end;
+    }
+    return result;
+  }
+
+  static ParsedTagData _parseMp4MetadataItem(
+    Uint8List bytes,
+    _Mp4Box item, {
+    required bool includeArtwork,
+  }) {
+    final dataBox = _findChildBox(bytes, item.dataOffset, item.end, 'data');
+    if (dataBox == null || dataBox.payloadLength < 8) {
+      return const ParsedTagData();
+    }
+    final data = ByteData.sublistView(
+      bytes,
+      dataBox.dataOffset,
+      dataBox.dataOffset + 8,
+    );
+    final dataType = data.getUint32(0, Endian.big);
+    final payload = bytes.sublist(dataBox.dataOffset + 8, dataBox.end);
+    switch (item.type) {
+      case '\u00a9nam':
+        return ParsedTagData(title: _decodeMp4Text(payload));
+      case '\u00a9ART':
+        return ParsedTagData(artist: _decodeMp4Text(payload));
+      case '\u00a9alb':
+        return ParsedTagData(album: _decodeMp4Text(payload));
+      case 'aART':
+        return ParsedTagData(albumArtist: _decodeMp4Text(payload));
+      case '\u00a9gen':
+        return ParsedTagData(genre: _decodeMp4Text(payload));
+      case '\u00a9day':
+        return ParsedTagData(year: _parseLeadingInt(_decodeMp4Text(payload)));
+      case 'trkn':
+        return ParsedTagData(trackNumber: _parseMp4Ordinal(payload));
+      case 'disk':
+        return ParsedTagData(discNumber: _parseMp4Ordinal(payload));
+      case 'covr':
+        if (!includeArtwork || payload.isEmpty) {
+          return const ParsedTagData();
+        }
+        final mimeType = switch (dataType) {
+          14 => 'image/png',
+          27 => 'image/bmp',
+          _ => 'image/jpeg',
+        };
+        return ParsedTagData(
+          artworkBytes: Uint8List.fromList(payload),
+          artworkMimeType: mimeType,
+        );
+      default:
+        return const ParsedTagData();
+    }
+  }
+
+  static int? _findMp4Duration(
+    Uint8List bytes, {
+    required int start,
+    required int end,
+  }) {
+    var durationMs = _findDurationInBoxes(bytes, start: start, end: end);
+    if (durationMs != null) {
+      return durationMs;
+    }
+    return null;
+  }
+
+  static int? _findDurationInBoxes(
+    Uint8List bytes, {
+    required int start,
+    required int end,
+  }) {
+    var offset = start;
+    while (offset < end) {
+      final box = _readMp4Box(bytes, offset, end);
+      if (box == null) {
+        break;
+      }
+      switch (box.type) {
+        case 'mvhd':
+          return _parseMvhdDuration(bytes, box);
+        case 'mdhd':
+          return _parseMdhdDuration(bytes, box);
+        case 'meta':
+          final nested = _findDurationInBoxes(
+            bytes,
+            start: box.dataOffset + 4,
+            end: box.end,
+          );
+          if (nested != null) {
+            return nested;
+          }
+          break;
+        case 'trak':
+        case 'mdia':
+        case 'moov':
+        case 'udta':
+          final nested = _findDurationInBoxes(
+            bytes,
+            start: box.dataOffset,
+            end: box.end,
+          );
+          if (nested != null) {
+            return nested;
+          }
+          break;
+        default:
+          break;
+      }
+      offset = box.end;
+    }
+    return null;
+  }
+
+  static int? _parseMvhdDuration(Uint8List bytes, _Mp4Box box) {
+    if (box.payloadLength < 20) {
+      return null;
+    }
+    final version = bytes[box.dataOffset];
+    final timescaleOffset = box.dataOffset + (version == 1 ? 20 : 12);
+    final durationOffset = box.dataOffset + (version == 1 ? 24 : 16);
+    if (durationOffset + (version == 1 ? 8 : 4) > box.end) {
+      return null;
+    }
+    final timescale = ByteData.sublistView(
+      bytes,
+      timescaleOffset,
+      timescaleOffset + 4,
+    ).getUint32(0, Endian.big);
+    if (timescale == 0) {
+      return null;
+    }
+    final duration = version == 1
+        ? _readUint64(bytes, durationOffset)
+        : ByteData.sublistView(
+            bytes,
+            durationOffset,
+            durationOffset + 4,
+          ).getUint32(0, Endian.big);
+    if (duration <= 0) {
+      return null;
+    }
+    return ((duration * 1000) ~/ timescale).toInt();
+  }
+
+  static int? _parseMdhdDuration(Uint8List bytes, _Mp4Box box) {
+    if (box.payloadLength < 20) {
+      return null;
+    }
+    final version = bytes[box.dataOffset];
+    final timescaleOffset = box.dataOffset + (version == 1 ? 16 : 12);
+    final durationOffset = box.dataOffset + (version == 1 ? 20 : 16);
+    if (durationOffset + (version == 1 ? 8 : 4) > box.end) {
+      return null;
+    }
+    final timescale = ByteData.sublistView(
+      bytes,
+      timescaleOffset,
+      timescaleOffset + 4,
+    ).getUint32(0, Endian.big);
+    if (timescale == 0) {
+      return null;
+    }
+    final duration = version == 1
+        ? _readUint64(bytes, durationOffset)
+        : ByteData.sublistView(
+            bytes,
+            durationOffset,
+            durationOffset + 4,
+          ).getUint32(0, Endian.big);
+    if (duration <= 0) {
+      return null;
+    }
+    return ((duration * 1000) ~/ timescale).toInt();
+  }
+
+  static _Mp4Box? _findChildBox(
+    Uint8List bytes,
+    int start,
+    int end,
+    String type,
+  ) {
+    var offset = start;
+    while (offset < end) {
+      final box = _readMp4Box(bytes, offset, end);
+      if (box == null) {
+        break;
+      }
+      if (box.type == type) {
+        return box;
+      }
+      offset = box.end;
+    }
+    return null;
+  }
+
+  static _Mp4Box? _readMp4Box(Uint8List bytes, int offset, int end) {
+    if (offset + 8 > end) {
+      return null;
+    }
+    final size32 = ByteData.sublistView(
+      bytes,
+      offset,
+      offset + 4,
+    ).getUint32(0, Endian.big);
+    final type = latin1.decode(bytes.sublist(offset + 4, offset + 8));
+    var headerSize = 8;
+    int size;
+    if (size32 == 1) {
+      if (offset + 16 > end) {
+        return null;
+      }
+      size = _readUint64(bytes, offset + 8);
+      headerSize = 16;
+    } else if (size32 == 0) {
+      size = end - offset;
+    } else {
+      size = size32;
+    }
+    if (size < headerSize || offset + size > end) {
+      return null;
+    }
+    return _Mp4Box(
+      offset: offset,
+      size: size,
+      headerSize: headerSize,
+      type: type,
+    );
+  }
+
+  static int _readUint64(Uint8List bytes, int offset) {
+    final data = ByteData.sublistView(bytes, offset, offset + 8);
+    final high = data.getUint32(0, Endian.big);
+    final low = data.getUint32(4, Endian.big);
+    return (high << 32) | low;
+  }
+
+  static String? _decodeMp4Text(Uint8List payload) {
+    if (payload.isEmpty) {
+      return null;
+    }
+    final decoded = utf8.decode(payload, allowMalformed: true).trim();
+    if (decoded.isNotEmpty) {
+      return decoded;
+    }
+    final fallback = latin1.decode(payload, allowInvalid: true).trim();
+    return fallback.isEmpty ? null : fallback;
+  }
+
+  static int? _parseMp4Ordinal(Uint8List payload) {
+    if (payload.length >= 4) {
+      final value = (payload[2] << 8) | payload[3];
+      if (value > 0) {
+        return value;
+      }
+    }
+    if (payload.length >= 6) {
+      final value = (payload[4] << 8) | payload[5];
+      if (value > 0) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   static ParsedTagData _parseWavInfo(Uint8List infoBytes) {
     var offset = 0;
     ParsedTagData result = const ParsedTagData();
@@ -419,88 +723,8 @@ class DriveEmbeddedTagParser {
     return result;
   }
 
-  static int _readSynchsafeInt(Uint8List bytes, int offset) {
-    return ((bytes[offset] & 0x7f) << 21) |
-        ((bytes[offset + 1] & 0x7f) << 14) |
-        ((bytes[offset + 2] & 0x7f) << 7) |
-        (bytes[offset + 3] & 0x7f);
-  }
-
-  static int _readUint32(Uint8List bytes, int offset) {
-    return (bytes[offset] << 24) |
-        (bytes[offset + 1] << 16) |
-        (bytes[offset + 2] << 8) |
-        bytes[offset + 3];
-  }
-
-  static String? _decodeId3Text(Uint8List frameData) {
-    if (frameData.length <= 1) {
-      return null;
-    }
-    final encoding = frameData[0];
-    final textBytes = frameData.sublist(1);
-    return switch (encoding) {
-      0 => decodeLegacySingleByteText(textBytes),
-      1 => _trimString(_decodeUtf16(textBytes, expectBom: true)),
-      2 => _trimString(
-        _decodeUtf16(textBytes, expectBom: false, bigEndian: true),
-      ),
-      _ => _trimString(utf8.decode(textBytes, allowMalformed: true)),
-    };
-  }
-
-  static String _decodeUtf16(
-    Uint8List bytes, {
-    required bool expectBom,
-    bool bigEndian = false,
-  }) {
-    var offset = 0;
-    var endian = bigEndian ? Endian.big : Endian.little;
-    if (expectBom && bytes.length >= 2) {
-      final bom = (bytes[0] << 8) | bytes[1];
-      if (bom == 0xfeff) {
-        endian = Endian.big;
-        offset = 2;
-      } else if (bom == 0xfffe) {
-        endian = Endian.little;
-        offset = 2;
-      }
-    }
-    final codeUnits = <int>[];
-    for (var i = offset; i + 1 < bytes.length; i += 2) {
-      final value = ByteData.sublistView(bytes, i, i + 2).getUint16(0, endian);
-      if (value == 0) {
-        break;
-      }
-      codeUnits.add(value);
-    }
-    return String.fromCharCodes(codeUnits);
-  }
-
-  static int _findTerminator(Uint8List bytes, int offset, int encoding) {
-    if (encoding == 0 || encoding == 3) {
-      while (offset < bytes.length && bytes[offset] != 0) {
-        offset++;
-      }
-      return offset + 1;
-    }
-
-    while (offset + 1 < bytes.length) {
-      if (bytes[offset] == 0 && bytes[offset + 1] == 0) {
-        return offset + 2;
-      }
-      offset += 2;
-    }
-    return bytes.length;
-  }
-
   static String? _trimLegacyText(Uint8List bytes) {
     return decodeLegacySingleByteText(bytes);
-  }
-
-  static String? _trimString(String? value) {
-    final trimmed = value?.replaceAll('\u0000', '').trim();
-    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   static int? _parseLeadingInt(String? value) {
@@ -510,4 +734,108 @@ class DriveEmbeddedTagParser {
     final match = RegExp(r'\d{1,4}').firstMatch(value);
     return match == null ? null : int.tryParse(match.group(0)!);
   }
+}
+
+class _ByteSegment {
+  const _ByteSegment({required this.fileOffset, required this.bytes});
+
+  final int fileOffset;
+  final Uint8List bytes;
+
+  int get endOffset => fileOffset + bytes.length;
+
+  bool contains(int offset, int length) {
+    return offset >= fileOffset && offset + length <= endOffset;
+  }
+}
+
+class _SegmentedFileView {
+  const _SegmentedFileView({required this.fileSize, required this.segments});
+
+  final int fileSize;
+  final List<_ByteSegment> segments;
+
+  Uint8List? read(int offset, int length) {
+    if (offset < 0 || length < 0 || offset + length > fileSize) {
+      return null;
+    }
+    for (final segment in segments) {
+      if (segment.contains(offset, length)) {
+        final start = offset - segment.fileOffset;
+        return Uint8List.fromList(segment.bytes.sublist(start, start + length));
+      }
+    }
+    return null;
+  }
+
+  _Mp4Box? findTopLevelBox(String type) {
+    final sorted = [...segments]
+      ..sort((left, right) => left.fileOffset.compareTo(right.fileOffset));
+    var offset = 0;
+    for (final segment in sorted) {
+      if (offset < segment.fileOffset || offset >= segment.endOffset) {
+        continue;
+      }
+      while (offset + 8 <= fileSize) {
+        final header = read(offset, 16) ?? read(offset, 8);
+        if (header == null) {
+          break;
+        }
+        final size32 = ByteData.sublistView(
+          header,
+          0,
+          4,
+        ).getUint32(0, Endian.big);
+        final resolvedType = latin1.decode(header.sublist(4, 8));
+        var headerSize = 8;
+        int size;
+        if (size32 == 1) {
+          if (header.length < 16) {
+            break;
+          }
+          size = DriveEmbeddedTagParser._readUint64(header, 8);
+          headerSize = 16;
+        } else if (size32 == 0) {
+          size = fileSize - offset;
+        } else {
+          size = size32;
+        }
+        if (size < headerSize || offset + size > fileSize) {
+          break;
+        }
+        final resolved = _Mp4Box(
+          offset: offset,
+          size: size,
+          headerSize: headerSize,
+          type: resolvedType,
+        );
+        if (resolved.type == type) {
+          return resolved;
+        }
+        offset = resolved.end;
+        if (offset < segment.fileOffset || offset >= segment.endOffset) {
+          break;
+        }
+      }
+    }
+    return null;
+  }
+}
+
+class _Mp4Box {
+  const _Mp4Box({
+    required this.offset,
+    required this.size,
+    required this.headerSize,
+    required this.type,
+  });
+
+  final int offset;
+  final int size;
+  final int headerSize;
+  final String type;
+
+  int get dataOffset => offset + headerSize;
+  int get end => offset + size;
+  int get payloadLength => size - headerSize;
 }

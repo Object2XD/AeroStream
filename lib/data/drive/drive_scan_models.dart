@@ -66,6 +66,30 @@ enum DriveScanTaskState {
   final String value;
 }
 
+enum DriveMetadataTaskRuntimeStage {
+  fetchHead('fetch_head'),
+  analyzeHead('analyze_head'),
+  plan('plan'),
+  fetch('fetch'),
+  parse('parse'),
+  flush('flush');
+
+  const DriveMetadataTaskRuntimeStage(this.value);
+
+  final String value;
+
+  static DriveMetadataTaskRuntimeStage? fromMetadataPipelineStageName(
+    String? stageName,
+  ) {
+    return switch (stageName) {
+      'fetch' => DriveMetadataTaskRuntimeStage.fetch,
+      'parse' => DriveMetadataTaskRuntimeStage.parse,
+      'flush' => DriveMetadataTaskRuntimeStage.flush,
+      _ => null,
+    };
+  }
+}
+
 enum TrackIndexStatus {
   active('active'),
   pendingDelete('pending_delete'),

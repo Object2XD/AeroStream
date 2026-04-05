@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 
 import '../../data/database/app_database.dart';
@@ -18,33 +16,33 @@ abstract class LibraryCatalogRepository {
 
   Future<void> ensureProjectionBackfillStarted();
 
-  Future<LibraryPage<TrackItem>> fetchSongsPage({
+  Future<LibrarySlice<TrackItem>> fetchSongsSlice({
     required LibrarySongSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   });
 
-  Future<LibraryPage<LibraryAlbum>> fetchAlbumsPage({
+  Future<LibrarySlice<LibraryAlbum>> fetchAlbumsSlice({
     required LibraryAlbumSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   });
 
-  Future<LibraryPage<LibraryArtist>> fetchArtistsPage({
+  Future<LibrarySlice<LibraryArtist>> fetchArtistsSlice({
     required LibraryArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   });
 
-  Future<LibraryPage<LibraryAlbumArtist>> fetchAlbumArtistsPage({
+  Future<LibrarySlice<LibraryAlbumArtist>> fetchAlbumArtistsSlice({
     required LibraryAlbumArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   });
 
-  Future<LibraryPage<LibraryGenre>> fetchGenresPage({
+  Future<LibrarySlice<LibraryGenre>> fetchGenresSlice({
     required LibraryGenreSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   });
 
@@ -75,9 +73,7 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
             (SELECT COUNT(*) FROM library_album_artists) AS album_artist_count,
             (SELECT COUNT(*) FROM library_genres) AS genre_count
           ''',
-          variables: [
-            Variable.withString(TrackIndexStatus.removed.value),
-          ],
+          variables: [Variable.withString(TrackIndexStatus.removed.value)],
           readsFrom: {
             _database.tracks,
             _database.libraryAlbumProjections,
@@ -100,58 +96,54 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
 
   @override
   Stream<LibraryProjectionStatusSnapshot> watchProjectionStatus() {
-    return (_database.select(_database.libraryProjectionMetas)
-          ..where((table) => table.id.equals(1)))
-        .watchSingleOrNull()
-        .map((row) {
-          if (row == null) {
-            return const LibraryProjectionStatusSnapshot(
-              state: LibraryProjectionBackfillState.pending,
-              revision: 0,
-            );
-          }
-          return LibraryProjectionStatusSnapshot(
-            state: LibraryProjectionBackfillState.values.byName(
-              row.backfillState,
-            ),
-            revision: row.revision,
-            errorMessage: row.lastError,
-          );
-        });
+    return (_database.select(
+      _database.libraryProjectionMetas,
+    )..where((table) => table.id.equals(1))).watchSingleOrNull().map((row) {
+      if (row == null) {
+        return const LibraryProjectionStatusSnapshot(
+          state: LibraryProjectionBackfillState.pending,
+          revision: 0,
+        );
+      }
+      return LibraryProjectionStatusSnapshot(
+        state: LibraryProjectionBackfillState.values.byName(row.backfillState),
+        revision: row.revision,
+        errorMessage: row.lastError,
+      );
+    });
   }
 
   @override
   Future<void> ensureProjectionBackfillStarted() async {
     await _database.ensureLibraryProjectionMetaRow();
     final meta = await _database.getLibraryProjectionMeta();
-    final state =
-        meta == null
-            ? LibraryProjectionBackfillState.pending
-            : LibraryProjectionBackfillState.values.byName(meta.backfillState);
+    final state = meta == null
+        ? LibraryProjectionBackfillState.pending
+        : LibraryProjectionBackfillState.values.byName(meta.backfillState);
 
     if (state == LibraryProjectionBackfillState.ready ||
         state == LibraryProjectionBackfillState.running) {
       return;
     }
 
-    _backfillFuture ??= _database
-        .rebuildLibraryProjections()
-        .whenComplete(() => _backfillFuture = null);
+    _backfillFuture ??= _database.rebuildLibraryProjections().whenComplete(
+      () => _backfillFuture = null,
+    );
     await _backfillFuture;
   }
 
   @override
-  Future<LibraryPage<TrackItem>> fetchSongsPage({
+  Future<LibrarySlice<TrackItem>> fetchSongsSlice({
     required LibrarySongSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final revision = await _database.getLibraryProjectionRevision();
-    final totalCount = await _countActiveTracks();
+    final totalCount = await _countVisibleSongs();
     final orderSql = _songOrderSql(sort);
-    final cursorClause = _songCursorClause(sort, cursor);
-    final rows = await _database.customSelect(
-      '''
+    final rows = await _database
+        .customSelect(
+          '''
       SELECT
         id,
         file_name,
@@ -163,45 +155,44 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
         title_sort,
         artist_sort
       FROM tracks
-      WHERE index_status != ?
-      ${cursorClause.sql}
+      WHERE index_status = ?
       ORDER BY $orderSql
       LIMIT ?
+      OFFSET ?
       ''',
-      variables: [
-        Variable.withString(TrackIndexStatus.removed.value),
-        ...cursorClause.variables,
-        Variable.withInt(limit + 1),
-      ],
-      readsFrom: {_database.tracks},
-    ).get();
+          variables: [
+            Variable.withString(TrackIndexStatus.active.value),
+            Variable.withInt(limit),
+            Variable.withInt(offset),
+          ],
+          readsFrom: {_database.tracks},
+        )
+        .get();
 
-    return _buildPage(
+    return _buildSlice(
+      offset: offset,
       rows: rows,
-      limit: limit,
       revision: revision,
       totalCount: totalCount,
-      mapRow:
-          (row) => TrackItem(
-            id: row.read<int>('id'),
-            title: row.read<String>('title'),
-            artist: row.read<String>('artist').isEmpty
-                ? 'Google Drive'
-                : row.read<String>('artist'),
-            album: row.read<String>('album').isEmpty
-                ? row.read<String>('file_name')
-                : row.read<String>('album'),
-            durationSeconds: (row.read<int>('duration_ms') / 1000).round(),
-            imageUrl: row.read<String>('artwork_uri'),
-          ),
-      nextCursorBuilder: (row) => _songNextCursor(sort, row),
+      mapRow: (row) => TrackItem(
+        id: row.read<int>('id'),
+        title: row.read<String>('title'),
+        artist: row.read<String>('artist').isEmpty
+            ? 'Google Drive'
+            : row.read<String>('artist'),
+        album: row.read<String>('album').isEmpty
+            ? row.read<String>('file_name')
+            : row.read<String>('album'),
+        durationSeconds: (row.read<int>('duration_ms') / 1000).round(),
+        imageUrl: row.read<String>('artwork_uri'),
+      ),
     );
   }
 
   @override
-  Future<LibraryPage<LibraryAlbum>> fetchAlbumsPage({
+  Future<LibrarySlice<LibraryAlbum>> fetchAlbumsSlice({
     required LibraryAlbumSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final revision = await _database.getLibraryProjectionRevision();
@@ -210,9 +201,9 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
       readsFrom: {_database.libraryAlbumProjections},
     );
     final orderSql = _albumOrderSql(sort);
-    final cursorClause = _albumCursorClause(sort, cursor);
-    final rows = await _database.customSelect(
-      '''
+    final rows = await _database
+        .customSelect(
+          '''
       SELECT
         stable_id,
         album,
@@ -223,41 +214,37 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
         COALESCE(artwork_uri, '') AS artwork_uri
       FROM library_albums
       WHERE 1 = 1
-      ${cursorClause.sql}
       ORDER BY $orderSql
       LIMIT ?
+      OFFSET ?
       ''',
-      variables: [
-        ...cursorClause.variables,
-        Variable.withInt(limit + 1),
-      ],
-      readsFrom: {_database.libraryAlbumProjections},
-    ).get();
+          variables: [Variable.withInt(limit), Variable.withInt(offset)],
+          readsFrom: {_database.libraryAlbumProjections},
+        )
+        .get();
 
-    return _buildPage(
+    return _buildSlice(
+      offset: offset,
       rows: rows,
-      limit: limit,
       revision: revision,
       totalCount: totalCount,
-      mapRow:
-          (row) => LibraryAlbum(
-            id: albumRouteKey(
-              albumArtist: row.read<String>('album_artist'),
-              album: row.read<String>('album'),
-            ),
-            title: row.read<String>('album'),
-            artist: row.read<String>('album_artist'),
-            year: row.read<int>('year'),
-            imageUrl: row.read<String>('artwork_uri'),
-          ),
-      nextCursorBuilder: (row) => _albumNextCursor(sort, row),
+      mapRow: (row) => LibraryAlbum(
+        id: albumRouteKey(
+          albumArtist: row.read<String>('album_artist'),
+          album: row.read<String>('album'),
+        ),
+        title: row.read<String>('album'),
+        artist: row.read<String>('album_artist'),
+        year: row.read<int>('year'),
+        imageUrl: row.read<String>('artwork_uri'),
+      ),
     );
   }
 
   @override
-  Future<LibraryPage<LibraryArtist>> fetchArtistsPage({
+  Future<LibrarySlice<LibraryArtist>> fetchArtistsSlice({
     required LibraryArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final revision = await _database.getLibraryProjectionRevision();
@@ -266,9 +253,9 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
       readsFrom: {_database.libraryArtistProjections},
     );
     final orderSql = _artistOrderSql(sort);
-    final cursorClause = _artistCursorClause(sort, cursor);
-    final rows = await _database.customSelect(
-      '''
+    final rows = await _database
+        .customSelect(
+          '''
       SELECT
         stable_id,
         name,
@@ -277,37 +264,33 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
         COALESCE(artwork_uri, '') AS artwork_uri
       FROM library_artists
       WHERE 1 = 1
-      ${cursorClause.sql}
       ORDER BY $orderSql
       LIMIT ?
+      OFFSET ?
       ''',
-      variables: [
-        ...cursorClause.variables,
-        Variable.withInt(limit + 1),
-      ],
-      readsFrom: {_database.libraryArtistProjections},
-    ).get();
+          variables: [Variable.withInt(limit), Variable.withInt(offset)],
+          readsFrom: {_database.libraryArtistProjections},
+        )
+        .get();
 
-    return _buildPage(
+    return _buildSlice(
+      offset: offset,
       rows: rows,
-      limit: limit,
       revision: revision,
       totalCount: totalCount,
-      mapRow:
-          (row) => LibraryArtist(
-            id: row.read<String>('stable_id'),
-            name: row.read<String>('name'),
-            songCount: row.read<int>('song_count'),
-            imageUrl: row.read<String>('artwork_uri'),
-          ),
-      nextCursorBuilder: (row) => _artistNextCursor(sort, row),
+      mapRow: (row) => LibraryArtist(
+        id: row.read<String>('stable_id'),
+        name: row.read<String>('name'),
+        songCount: row.read<int>('song_count'),
+        imageUrl: row.read<String>('artwork_uri'),
+      ),
     );
   }
 
   @override
-  Future<LibraryPage<LibraryAlbumArtist>> fetchAlbumArtistsPage({
+  Future<LibrarySlice<LibraryAlbumArtist>> fetchAlbumArtistsSlice({
     required LibraryAlbumArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final revision = await _database.getLibraryProjectionRevision();
@@ -316,9 +299,9 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
       readsFrom: {_database.libraryAlbumArtistProjections},
     );
     final orderSql = _albumArtistOrderSql(sort);
-    final cursorClause = _albumArtistCursorClause(sort, cursor);
-    final rows = await _database.customSelect(
-      '''
+    final rows = await _database
+        .customSelect(
+          '''
       SELECT
         stable_id,
         name,
@@ -327,37 +310,33 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
         COALESCE(artwork_uri, '') AS artwork_uri
       FROM library_album_artists
       WHERE 1 = 1
-      ${cursorClause.sql}
       ORDER BY $orderSql
       LIMIT ?
+      OFFSET ?
       ''',
-      variables: [
-        ...cursorClause.variables,
-        Variable.withInt(limit + 1),
-      ],
-      readsFrom: {_database.libraryAlbumArtistProjections},
-    ).get();
+          variables: [Variable.withInt(limit), Variable.withInt(offset)],
+          readsFrom: {_database.libraryAlbumArtistProjections},
+        )
+        .get();
 
-    return _buildPage(
+    return _buildSlice(
+      offset: offset,
       rows: rows,
-      limit: limit,
       revision: revision,
       totalCount: totalCount,
-      mapRow:
-          (row) => LibraryAlbumArtist(
-            id: row.read<String>('stable_id'),
-            name: row.read<String>('name'),
-            albumCount: row.read<int>('album_count'),
-            imageUrl: row.read<String>('artwork_uri'),
-          ),
-      nextCursorBuilder: (row) => _albumArtistNextCursor(sort, row),
+      mapRow: (row) => LibraryAlbumArtist(
+        id: row.read<String>('stable_id'),
+        name: row.read<String>('name'),
+        albumCount: row.read<int>('album_count'),
+        imageUrl: row.read<String>('artwork_uri'),
+      ),
     );
   }
 
   @override
-  Future<LibraryPage<LibraryGenre>> fetchGenresPage({
+  Future<LibrarySlice<LibraryGenre>> fetchGenresSlice({
     required LibraryGenreSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final revision = await _database.getLibraryProjectionRevision();
@@ -366,9 +345,9 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
       readsFrom: {_database.libraryGenreProjections},
     );
     final orderSql = _genreOrderSql(sort);
-    final cursorClause = _genreCursorClause(sort, cursor);
-    final rows = await _database.customSelect(
-      '''
+    final rows = await _database
+        .customSelect(
+          '''
       SELECT
         stable_id,
         name,
@@ -377,79 +356,88 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
         COALESCE(artwork_uri, '') AS artwork_uri
       FROM library_genres
       WHERE 1 = 1
-      ${cursorClause.sql}
       ORDER BY $orderSql
       LIMIT ?
+      OFFSET ?
       ''',
-      variables: [
-        ...cursorClause.variables,
-        Variable.withInt(limit + 1),
-      ],
-      readsFrom: {_database.libraryGenreProjections},
-    ).get();
+          variables: [Variable.withInt(limit), Variable.withInt(offset)],
+          readsFrom: {_database.libraryGenreProjections},
+        )
+        .get();
 
-    return _buildPage(
+    return _buildSlice(
+      offset: offset,
       rows: rows,
-      limit: limit,
       revision: revision,
       totalCount: totalCount,
-      mapRow:
-          (row) => LibraryGenre(
-            id: row.read<String>('stable_id'),
-            name: row.read<String>('name'),
-            songCount: row.read<int>('song_count'),
-            imageUrl: row.read<String>('artwork_uri'),
-          ),
-      nextCursorBuilder: (row) => _genreNextCursor(sort, row),
+      mapRow: (row) => LibraryGenre(
+        id: row.read<String>('stable_id'),
+        name: row.read<String>('name'),
+        songCount: row.read<int>('song_count'),
+        imageUrl: row.read<String>('artwork_uri'),
+      ),
     );
   }
 
   @override
   Future<List<TrackItem>> fetchAllSongs({required LibrarySongSort sort}) async {
     final items = <TrackItem>[];
-    LibraryCursor? cursor;
-    var hasMore = true;
-    while (hasMore) {
-      final page = await fetchSongsPage(sort: sort, cursor: cursor, limit: 250);
-      items.addAll(page.items);
-      cursor = page.nextCursor;
-      hasMore = page.hasMore && cursor != null;
+    var offset = 0;
+    while (true) {
+      final slice = await fetchSongsSlice(
+        sort: sort,
+        offset: offset,
+        limit: 250,
+      );
+      items.addAll(slice.items);
+      offset += slice.items.length;
+      if (slice.items.length < 250) {
+        break;
+      }
     }
     return items;
   }
 
-  LibraryPage<T> _buildPage<T>({
+  LibrarySlice<T> _buildSlice<T>({
+    required int offset,
     required List<QueryRow> rows,
-    required int limit,
     required int revision,
     required int totalCount,
     required T Function(QueryRow row) mapRow,
-    required LibraryCursor Function(QueryRow row) nextCursorBuilder,
   }) {
-    final hasMore = rows.length > limit;
-    final pageRows = hasMore ? rows.take(limit).toList(growable: false) : rows;
-    return LibraryPage<T>(
-      items: pageRows.map(mapRow).toList(growable: false),
+    return LibrarySlice<T>(
+      offset: offset,
+      items: rows.map(mapRow).toList(growable: false),
       totalCount: totalCount,
-      nextCursor:
-          hasMore && pageRows.isNotEmpty
-              ? nextCursorBuilder(pageRows.last)
-              : null,
-      hasMore: hasMore,
       revision: revision,
     );
   }
 
-  Future<int> _countActiveTracks() => _database.countTracks();
+  Future<int> _countVisibleSongs() async {
+    final row = await _database
+        .customSelect(
+          '''
+      SELECT COUNT(*) AS count
+      FROM tracks
+      WHERE index_status = ?
+      ''',
+          variables: [Variable.withString(TrackIndexStatus.active.value)],
+          readsFrom: {_database.tracks},
+        )
+        .getSingle();
+    return row.read<int>('count');
+  }
 
   Future<int> _countProjectionRows({
     required String tableName,
     required Set<ResultSetImplementation> readsFrom,
   }) async {
-    final row = await _database.customSelect(
-      'SELECT COUNT(*) AS count FROM $tableName',
-      readsFrom: readsFrom,
-    ).getSingle();
+    final row = await _database
+        .customSelect(
+          'SELECT COUNT(*) AS count FROM $tableName',
+          readsFrom: readsFrom,
+        )
+        .getSingle();
     return row.read<int>('count');
   }
 
@@ -501,319 +489,6 @@ class DatabaseLibraryCatalogRepository implements LibraryCatalogRepository {
         return 'name_sort ASC, stable_id ASC';
     }
   }
-
-  _CursorSql _songCursorClause(LibrarySongSort sort, LibraryCursor? cursor) {
-    if (cursor == null) {
-      return const _CursorSql.empty();
-    }
-
-    final values = _decodeCursor(cursor);
-    switch (sort) {
-      case LibrarySongSort.artist:
-        return _CursorSql(
-          sql: '''
-            AND (
-              artist_sort > ?
-              OR (artist_sort = ? AND title_sort > ?)
-              OR (artist_sort = ? AND title_sort = ? AND id > ?)
-            )
-          ''',
-          variables: [
-            Variable.withString(values['artistSort'] as String),
-            Variable.withString(values['artistSort'] as String),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withString(values['artistSort'] as String),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withInt(values['id'] as int),
-          ],
-        );
-      case LibrarySongSort.duration:
-        return _CursorSql(
-          sql: '''
-            AND (
-              duration_ms < ?
-              OR (duration_ms = ? AND title_sort > ?)
-              OR (duration_ms = ? AND title_sort = ? AND id > ?)
-            )
-          ''',
-          variables: [
-            Variable.withInt(values['durationMs'] as int),
-            Variable.withInt(values['durationMs'] as int),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withInt(values['durationMs'] as int),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withInt(values['id'] as int),
-          ],
-        );
-      case LibrarySongSort.title:
-        return _CursorSql(
-          sql: 'AND (title_sort > ? OR (title_sort = ? AND id > ?))',
-          variables: [
-            Variable.withString(values['titleSort'] as String),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withInt(values['id'] as int),
-          ],
-        );
-    }
-  }
-
-  _CursorSql _albumCursorClause(LibraryAlbumSort sort, LibraryCursor? cursor) {
-    if (cursor == null) {
-      return const _CursorSql.empty();
-    }
-
-    final values = _decodeCursor(cursor);
-    switch (sort) {
-      case LibraryAlbumSort.artist:
-        return _CursorSql(
-          sql: '''
-            AND (
-              artist_sort > ?
-              OR (artist_sort = ? AND title_sort > ?)
-              OR (artist_sort = ? AND title_sort = ? AND stable_id > ?)
-            )
-          ''',
-          variables: [
-            Variable.withString(values['artistSort'] as String),
-            Variable.withString(values['artistSort'] as String),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withString(values['artistSort'] as String),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-      case LibraryAlbumSort.year:
-        return _CursorSql(
-          sql: '''
-            AND (
-              year < ?
-              OR (year = ? AND title_sort > ?)
-              OR (year = ? AND title_sort = ? AND stable_id > ?)
-            )
-          ''',
-          variables: [
-            Variable.withInt(values['year'] as int),
-            Variable.withInt(values['year'] as int),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withInt(values['year'] as int),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-      case LibraryAlbumSort.title:
-        return _CursorSql(
-          sql:
-              'AND (title_sort > ? OR (title_sort = ? AND stable_id > ?))',
-          variables: [
-            Variable.withString(values['titleSort'] as String),
-            Variable.withString(values['titleSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-    }
-  }
-
-  _CursorSql _artistCursorClause(LibraryArtistSort sort, LibraryCursor? cursor) {
-    if (cursor == null) {
-      return const _CursorSql.empty();
-    }
-
-    final values = _decodeCursor(cursor);
-    switch (sort) {
-      case LibraryArtistSort.songCount:
-        return _CursorSql(
-          sql: '''
-            AND (
-              song_count < ?
-              OR (song_count = ? AND name_sort > ?)
-              OR (song_count = ? AND name_sort = ? AND stable_id > ?)
-            )
-          ''',
-          variables: [
-            Variable.withInt(values['metric'] as int),
-            Variable.withInt(values['metric'] as int),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withInt(values['metric'] as int),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-      case LibraryArtistSort.name:
-        return _CursorSql(
-          sql: 'AND (name_sort > ? OR (name_sort = ? AND stable_id > ?))',
-          variables: [
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-    }
-  }
-
-  _CursorSql _albumArtistCursorClause(
-    LibraryAlbumArtistSort sort,
-    LibraryCursor? cursor,
-  ) {
-    if (cursor == null) {
-      return const _CursorSql.empty();
-    }
-
-    final values = _decodeCursor(cursor);
-    switch (sort) {
-      case LibraryAlbumArtistSort.albumCount:
-        return _CursorSql(
-          sql: '''
-            AND (
-              album_count < ?
-              OR (album_count = ? AND name_sort > ?)
-              OR (album_count = ? AND name_sort = ? AND stable_id > ?)
-            )
-          ''',
-          variables: [
-            Variable.withInt(values['metric'] as int),
-            Variable.withInt(values['metric'] as int),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withInt(values['metric'] as int),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-      case LibraryAlbumArtistSort.name:
-        return _CursorSql(
-          sql: 'AND (name_sort > ? OR (name_sort = ? AND stable_id > ?))',
-          variables: [
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-    }
-  }
-
-  _CursorSql _genreCursorClause(LibraryGenreSort sort, LibraryCursor? cursor) {
-    if (cursor == null) {
-      return const _CursorSql.empty();
-    }
-
-    final values = _decodeCursor(cursor);
-    switch (sort) {
-      case LibraryGenreSort.songCount:
-        return _CursorSql(
-          sql: '''
-            AND (
-              song_count < ?
-              OR (song_count = ? AND name_sort > ?)
-              OR (song_count = ? AND name_sort = ? AND stable_id > ?)
-            )
-          ''',
-          variables: [
-            Variable.withInt(values['metric'] as int),
-            Variable.withInt(values['metric'] as int),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withInt(values['metric'] as int),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-      case LibraryGenreSort.name:
-        return _CursorSql(
-          sql: 'AND (name_sort > ? OR (name_sort = ? AND stable_id > ?))',
-          variables: [
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['nameSort'] as String),
-            Variable.withString(values['stableId'] as String),
-          ],
-        );
-    }
-  }
-
-  LibraryCursor _songNextCursor(LibrarySongSort sort, QueryRow row) {
-    switch (sort) {
-      case LibrarySongSort.artist:
-        return _encodeCursor(<String, Object?>{
-          'artistSort': row.read<String>('artist_sort'),
-          'titleSort': row.read<String>('title_sort'),
-          'id': row.read<int>('id'),
-        });
-      case LibrarySongSort.duration:
-        return _encodeCursor(<String, Object?>{
-          'durationMs': row.read<int>('duration_ms'),
-          'titleSort': row.read<String>('title_sort'),
-          'id': row.read<int>('id'),
-        });
-      case LibrarySongSort.title:
-        return _encodeCursor(<String, Object?>{
-          'titleSort': row.read<String>('title_sort'),
-          'id': row.read<int>('id'),
-        });
-    }
-  }
-
-  LibraryCursor _albumNextCursor(LibraryAlbumSort sort, QueryRow row) {
-    switch (sort) {
-      case LibraryAlbumSort.artist:
-        return _encodeCursor(<String, Object?>{
-          'artistSort': row.read<String>('artist_sort'),
-          'titleSort': row.read<String>('title_sort'),
-          'stableId': row.read<String>('stable_id'),
-        });
-      case LibraryAlbumSort.year:
-        return _encodeCursor(<String, Object?>{
-          'year': row.read<int>('year'),
-          'titleSort': row.read<String>('title_sort'),
-          'stableId': row.read<String>('stable_id'),
-        });
-      case LibraryAlbumSort.title:
-        return _encodeCursor(<String, Object?>{
-          'titleSort': row.read<String>('title_sort'),
-          'stableId': row.read<String>('stable_id'),
-        });
-    }
-  }
-
-  LibraryCursor _artistNextCursor(LibraryArtistSort sort, QueryRow row) {
-    return _encodeCursor(<String, Object?>{
-      'metric':
-          sort == LibraryArtistSort.songCount
-              ? row.read<int>('song_count')
-              : null,
-      'nameSort': row.read<String>('name_sort'),
-      'stableId': row.read<String>('stable_id'),
-    });
-  }
-
-  LibraryCursor _albumArtistNextCursor(
-    LibraryAlbumArtistSort sort,
-    QueryRow row,
-  ) {
-    return _encodeCursor(<String, Object?>{
-      'metric':
-          sort == LibraryAlbumArtistSort.albumCount
-              ? row.read<int>('album_count')
-              : null,
-      'nameSort': row.read<String>('name_sort'),
-      'stableId': row.read<String>('stable_id'),
-    });
-  }
-
-  LibraryCursor _genreNextCursor(LibraryGenreSort sort, QueryRow row) {
-    return _encodeCursor(<String, Object?>{
-      'metric':
-          sort == LibraryGenreSort.songCount
-              ? row.read<int>('song_count')
-              : null,
-      'nameSort': row.read<String>('name_sort'),
-      'stableId': row.read<String>('stable_id'),
-    });
-  }
-
-  LibraryCursor _encodeCursor(Map<String, Object?> values) {
-    return LibraryCursor(jsonEncode(values));
-  }
-
-  Map<String, Object?> _decodeCursor(LibraryCursor cursor) {
-    return jsonDecode(cursor.value) as Map<String, Object?>;
-  }
 }
 
 class MockLibraryCatalogRepository implements LibraryCatalogRepository {
@@ -849,9 +524,9 @@ class MockLibraryCatalogRepository implements LibraryCatalogRepository {
   Future<void> ensureProjectionBackfillStarted() async {}
 
   @override
-  Future<LibraryPage<LibraryAlbum>> fetchAlbumsPage({
+  Future<LibrarySlice<LibraryAlbum>> fetchAlbumsSlice({
     required LibraryAlbumSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final sorted = [...libraryAlbums];
@@ -866,13 +541,13 @@ class MockLibraryCatalogRepository implements LibraryCatalogRepository {
         sorted.sort((a, b) => a.title.compareTo(b.title));
         break;
     }
-    return _sliceMockPage(sorted, cursor: cursor, limit: limit);
+    return _sliceMockPage(sorted, offset: offset, limit: limit);
   }
 
   @override
-  Future<LibraryPage<LibraryAlbumArtist>> fetchAlbumArtistsPage({
+  Future<LibrarySlice<LibraryAlbumArtist>> fetchAlbumArtistsSlice({
     required LibraryAlbumArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final sorted = [...libraryAlbumArtists];
@@ -884,13 +559,13 @@ class MockLibraryCatalogRepository implements LibraryCatalogRepository {
         sorted.sort((a, b) => a.name.compareTo(b.name));
         break;
     }
-    return _sliceMockPage(sorted, cursor: cursor, limit: limit);
+    return _sliceMockPage(sorted, offset: offset, limit: limit);
   }
 
   @override
-  Future<LibraryPage<LibraryArtist>> fetchArtistsPage({
+  Future<LibrarySlice<LibraryArtist>> fetchArtistsSlice({
     required LibraryArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final sorted = [...libraryArtists];
@@ -902,13 +577,13 @@ class MockLibraryCatalogRepository implements LibraryCatalogRepository {
         sorted.sort((a, b) => a.name.compareTo(b.name));
         break;
     }
-    return _sliceMockPage(sorted, cursor: cursor, limit: limit);
+    return _sliceMockPage(sorted, offset: offset, limit: limit);
   }
 
   @override
-  Future<LibraryPage<LibraryGenre>> fetchGenresPage({
+  Future<LibrarySlice<LibraryGenre>> fetchGenresSlice({
     required LibraryGenreSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final sorted = [...libraryGenres];
@@ -920,13 +595,13 @@ class MockLibraryCatalogRepository implements LibraryCatalogRepository {
         sorted.sort((a, b) => a.name.compareTo(b.name));
         break;
     }
-    return _sliceMockPage(sorted, cursor: cursor, limit: limit);
+    return _sliceMockPage(sorted, offset: offset, limit: limit);
   }
 
   @override
-  Future<LibraryPage<TrackItem>> fetchSongsPage({
+  Future<LibrarySlice<TrackItem>> fetchSongsSlice({
     required LibrarySongSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
     final sorted = [...librarySongs];
@@ -941,41 +616,29 @@ class MockLibraryCatalogRepository implements LibraryCatalogRepository {
         sorted.sort((a, b) => a.title.compareTo(b.title));
         break;
     }
-    return _sliceMockPage(sorted, cursor: cursor, limit: limit);
+    return _sliceMockPage(sorted, offset: offset, limit: limit);
   }
 
   @override
   Future<List<TrackItem>> fetchAllSongs({required LibrarySongSort sort}) {
-    return fetchSongsPage(sort: sort, limit: librarySongs.length).then(
-      (page) => page.items,
-    );
+    return fetchSongsSlice(
+      sort: sort,
+      offset: 0,
+      limit: librarySongs.length,
+    ).then((slice) => slice.items);
   }
 
-  LibraryPage<T> _sliceMockPage<T>(
+  LibrarySlice<T> _sliceMockPage<T>(
     List<T> items, {
-    required LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) {
-    final start = cursor == null ? 0 : int.parse(cursor.value);
-    final end = start + limit > items.length ? items.length : start + limit;
-    return LibraryPage<T>(
-      items: items.sublist(start, end),
+    final end = offset + limit > items.length ? items.length : offset + limit;
+    return LibrarySlice<T>(
+      offset: offset,
+      items: items.sublist(offset, end),
       totalCount: items.length,
-      nextCursor: end < items.length ? LibraryCursor(end.toString()) : null,
-      hasMore: end < items.length,
       revision: 1,
     );
   }
-}
-
-class _CursorSql {
-  const _CursorSql({
-    required this.sql,
-    required this.variables,
-  });
-
-  const _CursorSql.empty() : sql = '', variables = const [];
-
-  final String sql;
-  final List<Variable<Object>> variables;
 }

@@ -116,6 +116,20 @@ class LibraryPage<T> {
   final int revision;
 }
 
+class LibrarySlice<T> {
+  const LibrarySlice({
+    required this.offset,
+    required this.items,
+    required this.totalCount,
+    required this.revision,
+  });
+
+  final int offset;
+  final List<T> items;
+  final int totalCount;
+  final int revision;
+}
+
 class LibraryCounts {
   const LibraryCounts({
     required this.trackCount,
@@ -150,30 +164,22 @@ class LibraryProjectionStatusSnapshot {
 }
 
 class DecodedAlbumRouteKey {
-  const DecodedAlbumRouteKey({
-    required this.albumArtist,
-    required this.album,
-  });
+  const DecodedAlbumRouteKey({required this.albumArtist, required this.album});
 
   final String albumArtist;
   final String album;
 }
 
-String albumRouteKey({
-  required String albumArtist,
-  required String album,
-}) {
+String albumRouteKey({required String albumArtist, required String album}) {
   return Uri.encodeComponent(
-    jsonEncode(<String, String>{
-      'albumArtist': albumArtist,
-      'album': album,
-    }),
+    jsonEncode(<String, String>{'albumArtist': albumArtist, 'album': album}),
   );
 }
 
 DecodedAlbumRouteKey? decodeAlbumRouteKey(String value) {
   try {
-    final decoded = jsonDecode(Uri.decodeComponent(value)) as Map<String, dynamic>;
+    final decoded =
+        jsonDecode(Uri.decodeComponent(value)) as Map<String, dynamic>;
     final albumArtist = decoded['albumArtist'] as String?;
     final album = decoded['album'] as String?;
     if (albumArtist == null || album == null) {

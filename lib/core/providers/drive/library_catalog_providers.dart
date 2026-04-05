@@ -11,60 +11,75 @@ import 'drive_providers.dart';
 
 class LibraryPageState<T> {
   const LibraryPageState({
-    required this.loadedPrefix,
+    required this.pageSize,
+    required this.pagesByOffset,
+    required this.loadingOffsets,
     required this.totalCount,
-    required this.nextCursor,
-    required this.hasMore,
-    required this.isLoadingMore,
     required this.isRefreshing,
     required this.revision,
   });
 
-  final List<T> loadedPrefix;
+  final int pageSize;
+  final Map<int, List<T>> pagesByOffset;
+  final Set<int> loadingOffsets;
   final int totalCount;
-  final LibraryCursor? nextCursor;
-  final bool hasMore;
-  final bool isLoadingMore;
   final bool isRefreshing;
   final int revision;
 
-  List<T> get items => loadedPrefix;
-  int get loadedCount => loadedPrefix.length;
+  int pageOffsetForIndex(int index) => (index ~/ pageSize) * pageSize;
 
   T? itemAt(int index) {
-    if (index < 0 || index >= loadedPrefix.length) {
+    if (index < 0 || index >= totalCount) {
       return null;
     }
-    return loadedPrefix[index];
+    final pageOffset = pageOffsetForIndex(index);
+    final page = pagesByOffset[pageOffset];
+    if (page == null) {
+      return null;
+    }
+
+    final pageIndex = index - pageOffset;
+    if (pageIndex < 0 || pageIndex >= page.length) {
+      return null;
+    }
+    return page[pageIndex];
   }
 
-  factory LibraryPageState.fromPage(LibraryPage<T> page) {
+  bool hasPageAtOffset(int offset) => pagesByOffset.containsKey(offset);
+
+  bool isPageLoading(int offset) => loadingOffsets.contains(offset);
+
+  factory LibraryPageState.fromSlice({
+    required LibrarySlice<T> slice,
+    required int pageSize,
+  }) {
+    final pagesByOffset = <int, List<T>>{};
+    if (slice.items.isNotEmpty) {
+      pagesByOffset[slice.offset] = slice.items;
+    }
     return LibraryPageState<T>(
-      loadedPrefix: page.items,
-      totalCount: page.totalCount,
-      nextCursor: page.nextCursor,
-      hasMore: page.hasMore,
-      isLoadingMore: false,
+      pageSize: pageSize,
+      pagesByOffset: pagesByOffset,
+      loadingOffsets: const <int>{},
+      totalCount: slice.totalCount,
       isRefreshing: false,
-      revision: page.revision,
+      revision: slice.revision,
     );
   }
 
   LibraryPageState<T> copyWith({
-    List<T>? loadedPrefix,
+    int? pageSize,
+    Map<int, List<T>>? pagesByOffset,
+    Set<int>? loadingOffsets,
     int? totalCount,
-    LibraryCursor? Function()? nextCursor,
-    bool? hasMore,
-    bool? isLoadingMore,
     bool? isRefreshing,
     int? revision,
   }) {
     return LibraryPageState<T>(
-      loadedPrefix: loadedPrefix ?? this.loadedPrefix,
+      pageSize: pageSize ?? this.pageSize,
+      pagesByOffset: pagesByOffset ?? this.pagesByOffset,
+      loadingOffsets: loadingOffsets ?? this.loadingOffsets,
       totalCount: totalCount ?? this.totalCount,
-      nextCursor: nextCursor == null ? this.nextCursor : nextCursor(),
-      hasMore: hasMore ?? this.hasMore,
-      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       revision: revision ?? this.revision,
     );
@@ -108,69 +123,31 @@ abstract class _LibraryPageController<T, SortT>
   final LibraryCatalogRepository repository;
   final SortT sort;
   final int pageSize;
-  bool _loadMoreScheduled = false;
+  int _generation = 0;
+  final Set<int> _scheduledOffsets = <int>{};
 
-  Future<LibraryPage<T>> fetchPage({
+  Future<LibrarySlice<T>> fetchSlice({
     required SortT sort,
+    required int offset,
     required int limit,
-    LibraryCursor? cursor,
   });
 
-  Future<void> loadMore() async {
+  void scheduleEnsureIndexLoaded(int index) {
     final current = state.asData?.value;
     if (current == null ||
-        current.isLoadingMore ||
         current.isRefreshing ||
-        !current.hasMore ||
-        current.nextCursor == null) {
+        index < 0 ||
+        index >= current.totalCount) {
       return;
     }
 
-    state = AsyncData(current.copyWith(isLoadingMore: true));
-    try {
-      final page = await fetchPage(
-        sort: sort,
-        limit: pageSize,
-        cursor: current.nextCursor,
-      );
-      state = AsyncData(
-        LibraryPageState<T>(
-          loadedPrefix: [...current.loadedPrefix, ...page.items],
-          totalCount: page.totalCount,
-          nextCursor: page.nextCursor,
-          hasMore: page.hasMore,
-          isLoadingMore: false,
-          isRefreshing: false,
-          revision: page.revision,
-        ),
-      );
-    } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
-    }
-  }
-
-  void scheduleLoadMoreIfNeeded(
-    int index, {
-    int prefetchThreshold = 12,
-  }) {
-    final current = state.asData?.value;
-    if (current == null ||
-        current.isLoadingMore ||
-        current.isRefreshing ||
-        !current.hasMore ||
-        current.nextCursor == null ||
-        index < current.loadedCount - prefetchThreshold ||
-        _loadMoreScheduled) {
+    final pageOffset = current.pageOffsetForIndex(index);
+    if (!current.hasPageAtOffset(pageOffset)) {
+      _schedulePageLoad(pageOffset);
       return;
     }
 
-    _loadMoreScheduled = true;
-    unawaited(
-      Future<void>.delayed(Duration.zero, () async {
-        _loadMoreScheduled = false;
-        await loadMore();
-      }),
-    );
+    _prefetchAdjacentPages(current, pageOffset);
   }
 
   Future<void> refreshIfStale(int revision) async {
@@ -184,6 +161,7 @@ abstract class _LibraryPageController<T, SortT>
 
   Future<void> _loadInitial({bool refreshing = false}) async {
     final current = state.asData?.value;
+    final generation = ++_generation;
     if (current == null || !refreshing) {
       state = const AsyncLoading();
     } else {
@@ -191,62 +169,172 @@ abstract class _LibraryPageController<T, SortT>
     }
 
     try {
-      final page = await fetchPage(sort: sort, limit: pageSize);
-      state = AsyncData(LibraryPageState<T>.fromPage(page));
+      final slice = await fetchSlice(sort: sort, offset: 0, limit: pageSize);
+      if (generation != _generation) {
+        return;
+      }
+
+      final nextState = LibraryPageState<T>.fromSlice(
+        slice: slice,
+        pageSize: pageSize,
+      );
+      state = AsyncData(nextState);
+      _prefetchAdjacentPages(nextState, 0);
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
     }
+  }
+
+  Future<void> _loadPageAtOffset(int offset, {bool prefetch = false}) async {
+    final current = state.asData?.value;
+    if (current == null ||
+        current.isRefreshing ||
+        offset < 0 ||
+        offset >= current.totalCount ||
+        current.hasPageAtOffset(offset) ||
+        current.isPageLoading(offset)) {
+      return;
+    }
+
+    final generation = _generation;
+    final loadingOffsets = Set<int>.from(current.loadingOffsets)..add(offset);
+    state = AsyncData(current.copyWith(loadingOffsets: loadingOffsets));
+
+    try {
+      final slice = await fetchSlice(
+        sort: sort,
+        offset: offset,
+        limit: pageSize,
+      );
+      if (generation != _generation) {
+        return;
+      }
+
+      final latest = state.asData?.value;
+      if (latest == null) {
+        return;
+      }
+
+      final nextPagesByOffset = Map<int, List<T>>.from(latest.pagesByOffset)
+        ..[slice.offset] = slice.items;
+      final nextLoadingOffsets = Set<int>.from(latest.loadingOffsets)
+        ..remove(offset);
+      final nextState = latest.copyWith(
+        pagesByOffset: nextPagesByOffset,
+        loadingOffsets: nextLoadingOffsets,
+        totalCount: slice.totalCount,
+        revision: slice.revision,
+        isRefreshing: false,
+      );
+      state = AsyncData(nextState);
+
+      if (!prefetch) {
+        _prefetchAdjacentPages(nextState, slice.offset);
+      }
+    } catch (error, stackTrace) {
+      if (generation != _generation) {
+        return;
+      }
+
+      final latest = state.asData?.value;
+      if (latest == null) {
+        state = AsyncError(error, stackTrace);
+        return;
+      }
+
+      final nextLoadingOffsets = Set<int>.from(latest.loadingOffsets)
+        ..remove(offset);
+      state = AsyncData(
+        latest.copyWith(
+          loadingOffsets: nextLoadingOffsets,
+          isRefreshing: false,
+        ),
+      );
+    }
+  }
+
+  void _prefetchAdjacentPages(LibraryPageState<T> current, int centerOffset) {
+    for (final offset in <int>[
+      centerOffset - pageSize,
+      centerOffset + pageSize,
+    ]) {
+      if (offset < 0 || offset >= current.totalCount) {
+        continue;
+      }
+      _schedulePageLoad(offset, prefetch: true);
+    }
+  }
+
+  void _schedulePageLoad(int offset, {bool prefetch = false}) {
+    final current = state.asData?.value;
+    if (current == null ||
+        offset < 0 ||
+        offset >= current.totalCount ||
+        current.hasPageAtOffset(offset) ||
+        current.isPageLoading(offset) ||
+        !_scheduledOffsets.add(offset)) {
+      return;
+    }
+
+    unawaited(
+      Future<void>.delayed(Duration.zero, () async {
+        _scheduledOffsets.remove(offset);
+        await _loadPageAtOffset(offset, prefetch: prefetch);
+      }),
+    );
   }
 }
 
 class LibrarySongsController
     extends _LibraryPageController<TrackItem, LibrarySongSort> {
-  LibrarySongsController({
-    required super.repository,
-    required super.sort,
-  }) : super(pageSize: 100);
+  LibrarySongsController({required super.repository, required super.sort})
+    : super(pageSize: 100);
 
   @override
-  Future<LibraryPage<TrackItem>> fetchPage({
+  Future<LibrarySlice<TrackItem>> fetchSlice({
     required LibrarySongSort sort,
+    required int offset,
     required int limit,
-    LibraryCursor? cursor,
   }) {
-    return repository.fetchSongsPage(sort: sort, cursor: cursor, limit: limit);
+    return repository.fetchSongsSlice(sort: sort, offset: offset, limit: limit);
   }
 }
 
 class LibraryAlbumsController
     extends _LibraryPageController<LibraryAlbum, LibraryAlbumSort> {
-  LibraryAlbumsController({
-    required super.repository,
-    required super.sort,
-  }) : super(pageSize: 80);
+  LibraryAlbumsController({required super.repository, required super.sort})
+    : super(pageSize: 80);
 
   @override
-  Future<LibraryPage<LibraryAlbum>> fetchPage({
+  Future<LibrarySlice<LibraryAlbum>> fetchSlice({
     required LibraryAlbumSort sort,
+    required int offset,
     required int limit,
-    LibraryCursor? cursor,
   }) {
-    return repository.fetchAlbumsPage(sort: sort, cursor: cursor, limit: limit);
+    return repository.fetchAlbumsSlice(
+      sort: sort,
+      offset: offset,
+      limit: limit,
+    );
   }
 }
 
 class LibraryArtistsController
     extends _LibraryPageController<LibraryArtist, LibraryArtistSort> {
-  LibraryArtistsController({
-    required super.repository,
-    required super.sort,
-  }) : super(pageSize: 80);
+  LibraryArtistsController({required super.repository, required super.sort})
+    : super(pageSize: 80);
 
   @override
-  Future<LibraryPage<LibraryArtist>> fetchPage({
+  Future<LibrarySlice<LibraryArtist>> fetchSlice({
     required LibraryArtistSort sort,
+    required int offset,
     required int limit,
-    LibraryCursor? cursor,
   }) {
-    return repository.fetchArtistsPage(sort: sort, cursor: cursor, limit: limit);
+    return repository.fetchArtistsSlice(
+      sort: sort,
+      offset: offset,
+      limit: limit,
+    );
   }
 }
 
@@ -258,14 +346,14 @@ class LibraryAlbumArtistsController
   }) : super(pageSize: 80);
 
   @override
-  Future<LibraryPage<LibraryAlbumArtist>> fetchPage({
+  Future<LibrarySlice<LibraryAlbumArtist>> fetchSlice({
     required LibraryAlbumArtistSort sort,
+    required int offset,
     required int limit,
-    LibraryCursor? cursor,
   }) {
-    return repository.fetchAlbumArtistsPage(
+    return repository.fetchAlbumArtistsSlice(
       sort: sort,
-      cursor: cursor,
+      offset: offset,
       limit: limit,
     );
   }
@@ -273,72 +361,79 @@ class LibraryAlbumArtistsController
 
 class LibraryGenresController
     extends _LibraryPageController<LibraryGenre, LibraryGenreSort> {
-  LibraryGenresController({
-    required super.repository,
-    required super.sort,
-  }) : super(pageSize: 80);
+  LibraryGenresController({required super.repository, required super.sort})
+    : super(pageSize: 80);
 
   @override
-  Future<LibraryPage<LibraryGenre>> fetchPage({
+  Future<LibrarySlice<LibraryGenre>> fetchSlice({
     required LibraryGenreSort sort,
+    required int offset,
     required int limit,
-    LibraryCursor? cursor,
   }) {
-    return repository.fetchGenresPage(sort: sort, cursor: cursor, limit: limit);
+    return repository.fetchGenresSlice(
+      sort: sort,
+      offset: offset,
+      limit: limit,
+    );
   }
 }
 
-final librarySongsControllerProvider = StateNotifierProvider.family<
-  LibrarySongsController,
-  AsyncValue<LibraryPageState<TrackItem>>,
-  LibrarySongSort
->((ref, sort) {
-  return LibrarySongsController(
-    repository: ref.watch(libraryCatalogRepositoryProvider),
-    sort: sort,
-  );
-});
+final librarySongsControllerProvider =
+    StateNotifierProvider.family<
+      LibrarySongsController,
+      AsyncValue<LibraryPageState<TrackItem>>,
+      LibrarySongSort
+    >((ref, sort) {
+      return LibrarySongsController(
+        repository: ref.watch(libraryCatalogRepositoryProvider),
+        sort: sort,
+      );
+    });
 
-final libraryAlbumsControllerProvider = StateNotifierProvider.family<
-  LibraryAlbumsController,
-  AsyncValue<LibraryPageState<LibraryAlbum>>,
-  LibraryAlbumSort
->((ref, sort) {
-  return LibraryAlbumsController(
-    repository: ref.watch(libraryCatalogRepositoryProvider),
-    sort: sort,
-  );
-});
+final libraryAlbumsControllerProvider =
+    StateNotifierProvider.family<
+      LibraryAlbumsController,
+      AsyncValue<LibraryPageState<LibraryAlbum>>,
+      LibraryAlbumSort
+    >((ref, sort) {
+      return LibraryAlbumsController(
+        repository: ref.watch(libraryCatalogRepositoryProvider),
+        sort: sort,
+      );
+    });
 
-final libraryArtistsControllerProvider = StateNotifierProvider.family<
-  LibraryArtistsController,
-  AsyncValue<LibraryPageState<LibraryArtist>>,
-  LibraryArtistSort
->((ref, sort) {
-  return LibraryArtistsController(
-    repository: ref.watch(libraryCatalogRepositoryProvider),
-    sort: sort,
-  );
-});
+final libraryArtistsControllerProvider =
+    StateNotifierProvider.family<
+      LibraryArtistsController,
+      AsyncValue<LibraryPageState<LibraryArtist>>,
+      LibraryArtistSort
+    >((ref, sort) {
+      return LibraryArtistsController(
+        repository: ref.watch(libraryCatalogRepositoryProvider),
+        sort: sort,
+      );
+    });
 
-final libraryAlbumArtistsControllerProvider = StateNotifierProvider.family<
-  LibraryAlbumArtistsController,
-  AsyncValue<LibraryPageState<LibraryAlbumArtist>>,
-  LibraryAlbumArtistSort
->((ref, sort) {
-  return LibraryAlbumArtistsController(
-    repository: ref.watch(libraryCatalogRepositoryProvider),
-    sort: sort,
-  );
-});
+final libraryAlbumArtistsControllerProvider =
+    StateNotifierProvider.family<
+      LibraryAlbumArtistsController,
+      AsyncValue<LibraryPageState<LibraryAlbumArtist>>,
+      LibraryAlbumArtistSort
+    >((ref, sort) {
+      return LibraryAlbumArtistsController(
+        repository: ref.watch(libraryCatalogRepositoryProvider),
+        sort: sort,
+      );
+    });
 
-final libraryGenresControllerProvider = StateNotifierProvider.family<
-  LibraryGenresController,
-  AsyncValue<LibraryPageState<LibraryGenre>>,
-  LibraryGenreSort
->((ref, sort) {
-  return LibraryGenresController(
-    repository: ref.watch(libraryCatalogRepositoryProvider),
-    sort: sort,
-  );
-});
+final libraryGenresControllerProvider =
+    StateNotifierProvider.family<
+      LibraryGenresController,
+      AsyncValue<LibraryPageState<LibraryGenre>>,
+      LibraryGenreSort
+    >((ref, sort) {
+      return LibraryGenresController(
+        repository: ref.watch(libraryCatalogRepositoryProvider),
+        sort: sort,
+      );
+    });

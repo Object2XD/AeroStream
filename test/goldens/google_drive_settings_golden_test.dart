@@ -58,6 +58,7 @@ void main() {
         metadataReadyCount: 5247,
         artworkReadyCount: 73,
         failedCount: 6,
+        itemsPerSecond: 12.4,
       ),
       isMutating: false,
       configurationMessage: null,

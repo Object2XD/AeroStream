@@ -61,6 +61,8 @@ dependencies:
   audio_metadata_reader: ^1.4.2
   charset: ^2.0.1
   audio_service: ^0.18.18
+  args: ^2.7.0
+  sqlite3: ^3.2.0
 
 dev_dependencies:
   flutter_test:

@@ -76,6 +76,7 @@ void main() {
             metadataReadyCount: 5247,
             artworkReadyCount: 73,
             failedCount: 6,
+            itemsPerSecond: 12.4,
           ),
         ),
       );
@@ -85,11 +86,15 @@ void main() {
       expect(find.text('Extracting metadata'), findsOneWidget);
       expect(find.byTooltip('Indexed 93,046'), findsOneWidget);
       expect(find.byTooltip('Tags 5,247'), findsOneWidget);
+      expect(find.byTooltip('Meta/s 12.4/s'), findsOneWidget);
       expect(find.byTooltip('Failed 6'), findsOneWidget);
       expect(find.text('93K'), findsOneWidget);
       expect(find.text('5.2K'), findsOneWidget);
+      expect(find.text('12.4/s'), findsOneWidget);
       expect(find.text('6'), findsOneWidget);
       expect(find.text('Artwork 73 ready so far.'), findsOneWidget);
+      expect(find.text('Pipeline'), findsNothing);
+      expect(find.text('Extract Meta'), findsNothing);
 
       final pauseButton = tester.widget<IconButton>(
         _iconButtonWithTooltip('Pause sync'),
@@ -104,6 +109,83 @@ void main() {
       expect(pauseButton.onPressed, isNotNull);
       expect(resumeButton.onPressed, isNull);
       expect(cancelButton.onPressed, isNotNull);
+    },
+  );
+
+  testWidgets(
+    'Google Drive settings shows 0.0 Meta/s while a running sync is stalled',
+    (WidgetTester tester) async {
+      final controller = _TestGoogleDriveController(
+        _buildState(
+          roots: [_buildRoot()],
+          scanProgress: const ScanProgress(
+            jobId: 42,
+            phase: 'metadata_enrichment',
+            state: 'running',
+            indexedCount: 93046,
+            metadataReadyCount: 5247,
+            artworkReadyCount: 73,
+            failedCount: 0,
+            itemsPerSecond: 0.0,
+          ),
+        ),
+      );
+
+      await _pumpScreen(tester, controller);
+
+      expect(find.byTooltip('Meta/s 0.0/s'), findsOneWidget);
+      expect(find.text('0.0/s'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Google Drive settings hides speed metric while sync is paused', (
+    WidgetTester tester,
+  ) async {
+    final controller = _TestGoogleDriveController(
+      _buildState(
+        roots: [_buildRoot(syncState: DriveScanJobState.paused.value)],
+        scanProgress: const ScanProgress(
+          jobId: 42,
+          phase: 'metadata_enrichment',
+          state: 'paused',
+          indexedCount: 93046,
+          metadataReadyCount: 5247,
+          artworkReadyCount: 73,
+          failedCount: 0,
+          itemsPerSecond: 12.4,
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, controller);
+
+    expect(find.byTooltip('Meta/s 12.4/s'), findsNothing);
+    expect(find.text('12.4/s'), findsNothing);
+  });
+
+  testWidgets(
+    'Google Drive settings still hides a stalled speed metric while sync is paused',
+    (WidgetTester tester) async {
+      final controller = _TestGoogleDriveController(
+        _buildState(
+          roots: [_buildRoot(syncState: DriveScanJobState.paused.value)],
+          scanProgress: const ScanProgress(
+            jobId: 42,
+            phase: 'metadata_enrichment',
+            state: 'paused',
+            indexedCount: 93046,
+            metadataReadyCount: 5247,
+            artworkReadyCount: 73,
+            failedCount: 0,
+            itemsPerSecond: 0.0,
+          ),
+        ),
+      );
+
+      await _pumpScreen(tester, controller);
+
+      expect(find.byTooltip('Meta/s 0.0/s'), findsNothing);
+      expect(find.text('0.0/s'), findsNothing);
     },
   );
 

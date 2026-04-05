@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -551,9 +550,14 @@ class _ActiveSyncContent extends StatelessWidget {
         ? 'Artwork ${formatCompactCount(progress.artworkReadyCount)} ready so far.'
         : null;
     final summaryMetrics = <_SyncMetric>[
-      _SyncMetric(label: 'Indexed', exactValue: progress.indexedCount),
-      _SyncMetric(label: 'Tags', exactValue: progress.metadataReadyCount),
-      _SyncMetric(
+      _SyncMetric.count(label: 'Indexed', exactValue: progress.indexedCount),
+      _SyncMetric.count(label: 'Tags', exactValue: progress.metadataReadyCount),
+      if (progress.isRunning && progress.itemsPerSecond != null)
+        _SyncMetric.rate(
+          label: _rateMetricLabel(progress.phase),
+          itemsPerSecond: progress.itemsPerSecond!,
+        ),
+      _SyncMetric.count(
         label: progress.failedCount > 0 ? 'Failed' : 'Artwork',
         exactValue: progress.failedCount > 0
             ? progress.failedCount
@@ -1256,14 +1260,10 @@ class _SyncMetricPill extends StatelessWidget {
         ? theme.colorScheme.error
         : theme.colorScheme.onSurface;
 
-    final displayValue = metric.compact
-        ? formatCompactCount(metric.exactValue)
-        : metric.exactValue.toString();
-
     return Tooltip(
-      message: '${metric.label} ${formatExactCount(metric.exactValue)}',
+      message: '${metric.label} ${metric.tooltipValue}',
       child: Semantics(
-        label: '${metric.label} ${formatExactCount(metric.exactValue)}',
+        label: '${metric.label} ${metric.tooltipValue}',
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
@@ -1289,7 +1289,7 @@ class _SyncMetricPill extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                displayValue,
+                metric.displayValue,
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: foreground,
                   fontWeight: FontWeight.w800,
@@ -1316,17 +1316,46 @@ class _PrimaryAction {
 }
 
 class _SyncMetric {
-  const _SyncMetric({
+  const _SyncMetric._({
     required this.label,
-    required this.exactValue,
+    required this.displayValue,
+    required this.tooltipValue,
     this.emphasize = false,
-    this.compact = true,
   });
 
+  factory _SyncMetric.count({
+    required String label,
+    required int exactValue,
+    bool emphasize = false,
+    bool compact = true,
+  }) {
+    return _SyncMetric._(
+      label: label,
+      displayValue: compact
+          ? formatCompactCount(exactValue)
+          : formatExactCount(exactValue),
+      tooltipValue: formatExactCount(exactValue),
+      emphasize: emphasize,
+    );
+  }
+
+  factory _SyncMetric.rate({
+    required String label,
+    required double itemsPerSecond,
+    bool emphasize = false,
+  }) {
+    return _SyncMetric._(
+      label: label,
+      displayValue: formatCompactRate(itemsPerSecond),
+      tooltipValue: formatExactRate(itemsPerSecond),
+      emphasize: emphasize,
+    );
+  }
+
   final String label;
-  final int exactValue;
+  final String displayValue;
+  final String tooltipValue;
   final bool emphasize;
-  final bool compact;
 }
 
 class _DriveFolderPickerSheet extends StatefulWidget {
@@ -1685,6 +1714,15 @@ String _phaseSubtitle(ScanProgress progress) {
   };
 }
 
+String _rateMetricLabel(String phase) {
+  return switch (phase) {
+    'metadata_enrichment' => 'Meta/s',
+    'artwork_enrichment' => 'Art/s',
+    'baseline_discovery' || 'incremental_changes' => 'Files/s',
+    _ => 'Speed',
+  };
+}
+
 String? _friendlyRootError(String? rawError) {
   if (rawError == null || rawError.isEmpty) {
     return null;
@@ -1727,6 +1765,41 @@ String formatExactCount(int count) {
     buffer.write(digits[index]);
   }
   return buffer.toString();
+}
+
+String formatCompactRate(double itemsPerSecond) {
+  final rate = itemsPerSecond.isFinite && itemsPerSecond > 0
+      ? itemsPerSecond
+      : 0.0;
+  if (rate == 0) {
+    return '0.0/s';
+  }
+  if (rate < 1000) {
+    return '${_formatCompactDecimal(rate)}/s';
+  }
+  if (rate < 10000) {
+    return '${_formatCompactDecimal(rate / 1000)}K/s';
+  }
+  if (rate < 1000000) {
+    return '${(rate / 1000).round()}K/s';
+  }
+  return '${_formatCompactDecimal(rate / 1000000)}M/s';
+}
+
+String formatExactRate(double itemsPerSecond) {
+  final rate = itemsPerSecond.isFinite && itemsPerSecond > 0
+      ? itemsPerSecond
+      : 0.0;
+  if (rate == 0) {
+    return '0.0/s';
+  }
+  final fixed = rate >= 100 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
+  final parts = fixed.split('.');
+  final whole = formatExactCount(int.parse(parts.first));
+  if (parts.length == 1 || parts[1] == '0') {
+    return '$whole/s';
+  }
+  return '$whole.${parts[1]}/s';
 }
 
 String formatBytes(int bytes) {

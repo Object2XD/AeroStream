@@ -231,78 +231,72 @@ class _LibraryScreenTestRepository implements LibraryCatalogRepository {
   }
 
   @override
-  Future<LibraryPage<LibraryAlbum>> fetchAlbumsPage({
+  Future<LibrarySlice<LibraryAlbum>> fetchAlbumsSlice({
     required LibraryAlbumSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
-    final start = cursor == null ? 0 : int.parse(cursor.value);
-    final end = (start + limit).clamp(0, _albums.length);
-    return LibraryPage<LibraryAlbum>(
-      items: _albums.sublist(start, end),
+    final end = (offset + limit).clamp(0, _albums.length);
+    return LibrarySlice<LibraryAlbum>(
+      offset: offset,
+      items: _albums.sublist(offset, end),
       totalCount: _albums.length,
-      nextCursor: end < _albums.length ? LibraryCursor(end.toString()) : null,
-      hasMore: end < _albums.length,
       revision: projectionStatus.revision,
     );
   }
 
   @override
-  Future<LibraryPage<LibraryAlbumArtist>> fetchAlbumArtistsPage({
+  Future<LibrarySlice<LibraryAlbumArtist>> fetchAlbumArtistsSlice({
     required LibraryAlbumArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
-    return LibraryPage<LibraryAlbumArtist>(
+    return LibrarySlice<LibraryAlbumArtist>(
+      offset: 0,
       items: const <LibraryAlbumArtist>[],
       totalCount: 0,
-      nextCursor: null,
-      hasMore: false,
       revision: projectionStatus.revision,
     );
   }
 
   @override
-  Future<LibraryPage<LibraryArtist>> fetchArtistsPage({
+  Future<LibrarySlice<LibraryArtist>> fetchArtistsSlice({
     required LibraryArtistSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
-    return LibraryPage<LibraryArtist>(
+    return LibrarySlice<LibraryArtist>(
+      offset: 0,
       items: const <LibraryArtist>[],
       totalCount: 0,
-      nextCursor: null,
-      hasMore: false,
       revision: projectionStatus.revision,
     );
   }
 
   @override
-  Future<LibraryPage<LibraryGenre>> fetchGenresPage({
+  Future<LibrarySlice<LibraryGenre>> fetchGenresSlice({
     required LibraryGenreSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
-    return LibraryPage<LibraryGenre>(
+    return LibrarySlice<LibraryGenre>(
+      offset: 0,
       items: const <LibraryGenre>[],
       totalCount: 0,
-      nextCursor: null,
-      hasMore: false,
       revision: projectionStatus.revision,
     );
   }
 
   @override
-  Future<LibraryPage<TrackItem>> fetchSongsPage({
+  Future<LibrarySlice<TrackItem>> fetchSongsSlice({
     required LibrarySongSort sort,
-    LibraryCursor? cursor,
+    required int offset,
     required int limit,
   }) async {
-    return LibraryPage<TrackItem>(
+    return LibrarySlice<TrackItem>(
+      offset: 0,
       items: const <TrackItem>[],
       totalCount: 0,
-      nextCursor: null,
-      hasMore: false,
       revision: projectionStatus.revision,
     );
   }

@@ -211,9 +211,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
         prefix: 'DriveAuth',
         subsystem: 'auth',
         operation: 'restore_session_success',
-        details: <String, Object?>{
-          'authKind': 'google_sign_in',
-        },
+        details: <String, Object?>{'authKind': 'google_sign_in'},
       );
       return DriveAccountProfile(
         providerAccountId: account.id,
@@ -236,6 +234,15 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
       );
       return null;
     }
+    _logger.info(
+      prefix: 'DriveAuth',
+      subsystem: 'auth',
+      operation: 'restore_session_credentials_loaded',
+      details: <String, Object?>{
+        'authKind': 'oauth_desktop',
+        'credentialBytes': credentialsJson.length,
+      },
+    );
 
     final oauth2.Credentials credentials;
     try {
@@ -244,10 +251,25 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
       await _clearCorruptedDesktopSession(error);
       return null;
     }
+    _logger.info(
+      prefix: 'DriveAuth',
+      subsystem: 'auth',
+      operation: 'restore_session_credentials_parsed',
+      details: const <String, Object?>{'authKind': 'oauth_desktop'},
+    );
     _desktopClient = _buildDesktopClient(credentials);
 
     final profile = await _readStoredDesktopProfile();
     if (profile != null) {
+      _logger.info(
+        prefix: 'DriveAuth',
+        subsystem: 'auth',
+        operation: 'restore_session_profile_loaded',
+        details: <String, Object?>{
+          'authKind': 'oauth_desktop',
+          'accountEmail': profile.email,
+        },
+      );
       _logger.info(
         prefix: 'DriveAuth',
         subsystem: 'auth',
@@ -257,6 +279,13 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
       return profile;
     }
 
+    _logger.info(
+      prefix: 'DriveAuth',
+      subsystem: 'auth',
+      operation: 'restore_session_profile_missing',
+      details: const <String, Object?>{'authKind': 'oauth_desktop'},
+      message: 'Stored desktop profile is incomplete; fetching Drive profile.',
+    );
     final fetchedProfile = await _fetchProfileWithClient(_desktopClient!);
     await _persistDesktopProfile(fetchedProfile, throwOnFailure: false);
     _logger.info(
@@ -703,7 +732,17 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
   Future<String?> _readDesktopSecureValue(String key) async {
     return _withDesktopStorageLock(() async {
       try {
-        return await _secureStorage.read(key: key);
+        final value = await _secureStorage.read(key: key);
+        _logger.info(
+          prefix: 'DriveAuth',
+          subsystem: 'auth',
+          operation: 'secure_storage_read_result',
+          details: <String, Object?>{
+            'key': key,
+            'present': value != null && value.isNotEmpty,
+          },
+        );
+        return value;
       } on FormatException catch (error) {
         _logger.warning(
           prefix: 'DriveAuth',
