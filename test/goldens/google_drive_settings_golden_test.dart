@@ -1,6 +1,9 @@
 import 'package:aero_stream/core/providers/drive/drive_providers.dart';
 import 'package:aero_stream/data/database/app_database.dart';
+import 'package:aero_stream/data/drive/drive_auth_repository.dart';
 import 'package:aero_stream/data/drive/drive_entities.dart';
+import 'package:aero_stream/data/drive/drive_http_client.dart';
+import 'package:aero_stream/data/drive/drive_library_repository.dart';
 import 'package:aero_stream/screens/info/google_drive/google_drive_settings_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +11,7 @@ import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'golden_test_harness.dart';
+import '../support/drive_test_helpers.dart';
 
 void main() {
   setUpAll(loadAeroFonts);
@@ -20,7 +24,7 @@ void main() {
   testGoldens('Google Drive settings syncing state stays visually stable', (
     WidgetTester tester,
   ) async {
-    final state = GoogleDriveState(
+    final state = DriveWorkspaceState(
       isConfigured: true,
       account: const DriveAccountProfile(
         providerAccountId: 'drive-account',
@@ -50,7 +54,7 @@ void main() {
         ),
       ],
       cacheSizeBytes: 0,
-      scanProgress: const ScanProgress(
+      syncProgress: const DriveSyncProgress(
         jobId: 42,
         phase: 'metadata_enrichment',
         state: 'running',
@@ -68,9 +72,10 @@ void main() {
     await tester.pumpWidgetBuilder(
       ProviderScope(
         overrides: [
-          googleDriveControllerProvider.overrideWith(
-            () => _GoldenGoogleDriveController(state),
+          driveWorkspaceProvider.overrideWith(
+            () => FixedDriveWorkspaceNotifier(state),
           ),
+          driveCommandsProvider.overrideWithValue(_GoldenDriveCommands(state)),
         ],
         child: wrapWithShell(
           const GoogleDriveSettingsScreen(),
@@ -91,7 +96,7 @@ void main() {
   testGoldens(
     'Google Drive settings disconnected state stays visually stable',
     (WidgetTester tester) async {
-      const state = GoogleDriveState(
+      const state = DriveWorkspaceState(
         isConfigured: true,
         account: null,
         hasLinkedAccount: false,
@@ -100,7 +105,7 @@ void main() {
         authErrorMessage: null,
         roots: <SyncRoot>[],
         cacheSizeBytes: 0,
-        scanProgress: null,
+        syncProgress: null,
         isMutating: false,
         configurationMessage: null,
         errorMessage: null,
@@ -109,8 +114,11 @@ void main() {
       await tester.pumpWidgetBuilder(
         ProviderScope(
           overrides: [
-            googleDriveControllerProvider.overrideWith(
-              () => _GoldenGoogleDriveController(state),
+            driveWorkspaceProvider.overrideWith(
+              () => FixedDriveWorkspaceNotifier(state),
+            ),
+            driveCommandsProvider.overrideWithValue(
+              _GoldenDriveCommands(state),
             ),
           ],
           child: wrapWithShell(
@@ -131,48 +139,20 @@ void main() {
   );
 }
 
-class _GoldenGoogleDriveController extends GoogleDriveController {
-  _GoldenGoogleDriveController(this._state);
-
-  final GoogleDriveState _state;
-
-  @override
-  Future<GoogleDriveState> build() async => _state;
+class _GoldenDriveCommands extends DriveCommands {
+  _GoldenDriveCommands(DriveWorkspaceState state)
+    : super(
+        database: makeTestDatabase(),
+        authRepository: NoOpDriveAuthRepository(),
+        httpClient: DriveHttpClient(authRepository: NoOpDriveAuthRepository()),
+        libraryRepository: DriveLibraryRepository(makeTestDatabase()),
+        runner: RecordingDriveScanRunner(
+          database: makeTestDatabase(),
+          authRepository: NoOpDriveAuthRepository(),
+        ),
+        workspace: FixedDriveWorkspaceNotifier(state),
+      );
 
   @override
   Future<void> connect() async {}
-
-  @override
-  Future<void> disconnect() async {}
-
-  @override
-  Future<void> addRoot(DriveFolderEntry folder) async {}
-
-  @override
-  Future<void> removeRoot(int rootId) async {}
-
-  @override
-  Future<void> enqueueSync() async {}
-
-  @override
-  Future<void> pauseSync(int jobId) async {}
-
-  @override
-  Future<void> resumeSync(int jobId) async {}
-
-  @override
-  Future<void> cancelSync(int jobId) async {}
-
-  @override
-  Future<void> clearCache() async {}
-
-  @override
-  Future<List<DriveFolderEntry>> listFolders({String parentId = 'root'}) async {
-    return const <DriveFolderEntry>[];
-  }
-
-  @override
-  Future<DriveFolderEntry> getFolder(String folderId) async {
-    return const DriveFolderEntry(id: 'root', name: 'My Drive', parentId: null);
-  }
 }

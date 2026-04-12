@@ -21,7 +21,7 @@ class InformationScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final settings = ref.watch(appSettingsProvider);
-    final driveState = ref.watch(googleDriveControllerProvider);
+    final driveState = ref.watch(driveWorkspaceProvider);
     final infoStatsValue = ref.watch(libraryInfoStatsProvider);
 
     final dynamicStats = infoStatsValue.asData?.value;
@@ -235,7 +235,7 @@ class InformationScreen extends HookConsumerWidget {
     };
   }
 
-  String _driveSubtitle(AsyncValue<GoogleDriveState> state) {
+  String _driveSubtitle(AsyncValue<DriveWorkspaceState> state) {
     return state.when(
       data: (value) {
         if (!value.isConfigured && value.configurationMessage != null) {
@@ -247,7 +247,7 @@ class InformationScreen extends HookConsumerWidget {
         if (value.requiresReconnect) {
           return '${value.account!.email} • reconnect required';
         }
-        final progress = value.scanProgress;
+        final progress = value.syncProgress;
         if (progress != null) {
           final phase = switch (progress.phase) {
             'baseline_discovery' => 'discovering files',

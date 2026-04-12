@@ -61,8 +61,8 @@ class _AeroStreamAppState extends ConsumerState<AeroStreamApp> {
         start: () => ref.read(playbackRepositoryProvider).initialize(),
       );
       _startGuardedWarmUp(
-        label: 'Google Drive controller warm-up',
-        start: () => ref.read(googleDriveControllerProvider.future),
+        label: 'Google Drive workspace warm-up',
+        start: () => ref.read(driveWorkspaceProvider.future),
       );
     } catch (error, stackTrace) {
       _reportBootstrapError(

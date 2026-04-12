@@ -1486,6 +1486,22 @@ class AppDatabase extends _$AppDatabase {
     ).watchSingle().map((row) => row.read<int>('size'));
   }
 
+  Future<int> getCacheSizeBytes() async {
+    final row = await customSelect(
+      '''
+      SELECT COALESCE(SUM(size_bytes), 0) AS size
+      FROM tracks
+      WHERE cache_status != ? AND index_status != ?
+      ''',
+      variables: [
+        Variable.withString('none'),
+        Variable.withString(TrackIndexStatus.removed.value),
+      ],
+      readsFrom: {tracks},
+    ).getSingle();
+    return row.read<int>('size');
+  }
+
   Future<int> upsertDriveObject(DriveObjectsCompanion row) {
     return into(driveObjects).insertOnConflictUpdate(row);
   }

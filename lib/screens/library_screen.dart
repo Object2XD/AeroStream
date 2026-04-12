@@ -66,7 +66,7 @@ class LibraryScreen extends HookConsumerWidget {
     final previousTabRef = useRef(currentTab);
     final previousSortRef = useRef(currentSortKey);
 
-    final driveState = ref.watch(googleDriveControllerProvider);
+    final driveState = ref.watch(driveWorkspaceProvider);
     final countsValue = ref.watch(libraryCountsProvider);
     final projectionStatusValue = ref.watch(libraryProjectionStatusProvider);
     final revisionValue = ref.watch(libraryRevisionProvider);

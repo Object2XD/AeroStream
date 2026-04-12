@@ -32,7 +32,7 @@ void main() {
         NotificationPermissionState.notRequired,
       );
       final playbackRepository = _RecordingPlaybackRepository();
-      final driveController = _RecordingGoogleDriveController();
+      final driveWorkspace = _RecordingDriveWorkspaceNotifier();
       final router = _buildTestRouter();
 
       addTearDown(router.dispose);
@@ -46,7 +46,7 @@ void main() {
             notificationServiceProvider.overrideWithValue(notificationService),
             permissionServiceProvider.overrideWithValue(permissionService),
             playbackRepositoryProvider.overrideWithValue(playbackRepository),
-            googleDriveControllerProvider.overrideWith(() => driveController),
+            driveWorkspaceProvider.overrideWith(() => driveWorkspace),
           ],
           child: const AeroStreamApp(),
         ),
@@ -64,7 +64,7 @@ void main() {
         isNot(contains(SchedulerPhase.persistentCallbacks)),
       );
       expect(playbackRepository.initializeCallCount, 0);
-      expect(driveController.buildCallCount, 0);
+      expect(driveWorkspace.buildCallCount, 0);
       expect(tester.takeException(), isNull);
     },
   );
@@ -77,7 +77,7 @@ void main() {
         NotificationPermissionState.notRequired,
       );
       final playbackRepository = _RecordingPlaybackRepository();
-      final driveController = _RecordingGoogleDriveController();
+      final driveWorkspace = _RecordingDriveWorkspaceNotifier();
       final router = _buildTestRouter();
 
       addTearDown(router.dispose);
@@ -90,7 +90,7 @@ void main() {
             notificationServiceProvider.overrideWithValue(notificationService),
             permissionServiceProvider.overrideWithValue(permissionService),
             playbackRepositoryProvider.overrideWithValue(playbackRepository),
-            googleDriveControllerProvider.overrideWith(() => driveController),
+            driveWorkspaceProvider.overrideWith(() => driveWorkspace),
           ],
           child: const AeroStreamApp(),
         ),
@@ -100,7 +100,7 @@ void main() {
       expect(notificationService.initializeCallCount, 1);
       expect(permissionService.checkCallCount, 1);
       expect(playbackRepository.initializeCallCount, 1);
-      expect(driveController.buildCallCount, 1);
+      expect(driveWorkspace.buildCallCount, 1);
       expect(tester.takeException(), isNull);
     },
   );
@@ -115,7 +115,7 @@ void main() {
       final playbackRepository = _RecordingPlaybackRepository(
         throwOnInitialize: true,
       );
-      final driveController = _RecordingGoogleDriveController();
+      final driveWorkspace = _RecordingDriveWorkspaceNotifier();
       final router = _buildTestRouter();
       final reportedErrors = <FlutterErrorDetails>[];
       final previousOnError = FlutterError.onError;
@@ -134,7 +134,7 @@ void main() {
             notificationServiceProvider.overrideWithValue(notificationService),
             permissionServiceProvider.overrideWithValue(permissionService),
             playbackRepositoryProvider.overrideWithValue(playbackRepository),
-            googleDriveControllerProvider.overrideWith(() => driveController),
+            driveWorkspaceProvider.overrideWith(() => driveWorkspace),
           ],
           child: const AeroStreamApp(),
         ),
@@ -146,8 +146,8 @@ void main() {
         reportedErrors.any(
           (details) =>
               details.context?.toDescription().contains(
-                    'playback repository warm-up',
-                  ) ??
+                'playback repository warm-up',
+              ) ??
               false,
         ),
         isTrue,
@@ -159,10 +159,7 @@ void main() {
 GoRouter _buildTestRouter() {
   return GoRouter(
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const SizedBox.shrink(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const SizedBox.shrink()),
     ],
   );
 }
@@ -207,13 +204,13 @@ class _RecordingPermissionService implements PermissionService {
   }
 }
 
-class _RecordingGoogleDriveController extends GoogleDriveController {
+class _RecordingDriveWorkspaceNotifier extends DriveWorkspaceNotifier {
   int buildCallCount = 0;
 
   @override
-  Future<GoogleDriveState> build() async {
+  Future<DriveWorkspaceState> build() async {
     buildCallCount++;
-    return const GoogleDriveState(
+    return const DriveWorkspaceState(
       isConfigured: true,
       account: null,
       hasLinkedAccount: false,
@@ -222,7 +219,7 @@ class _RecordingGoogleDriveController extends GoogleDriveController {
       authErrorMessage: null,
       roots: <SyncRoot>[],
       cacheSizeBytes: 0,
-      scanProgress: null,
+      syncProgress: null,
       isMutating: false,
       configurationMessage: null,
       errorMessage: null,
@@ -233,7 +230,9 @@ class _RecordingGoogleDriveController extends GoogleDriveController {
 class _RecordingPlaybackRepository extends PlaybackRepository {
   factory _RecordingPlaybackRepository({bool throwOnInitialize = false}) {
     final database = AppDatabase(NativeDatabase.memory());
-    final httpClient = DriveHttpClient(authRepository: _NoOpDriveAuthRepository());
+    final httpClient = DriveHttpClient(
+      authRepository: _NoOpDriveAuthRepository(),
+    );
     return _RecordingPlaybackRepository._(
       database: database,
       httpClient: httpClient,

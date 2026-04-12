@@ -12,8 +12,8 @@ class GoogleDriveSettingsScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final driveState = ref.watch(googleDriveControllerProvider);
-    final controller = ref.read(googleDriveControllerProvider.notifier);
+    final driveState = ref.watch(driveWorkspaceProvider);
+    final controller = ref.read(driveCommandsProvider);
 
     return AeroPageScaffold(
       title: 'Google Drive',
@@ -40,14 +40,14 @@ class GoogleDriveSettingsScreen extends HookConsumerWidget {
                 onSync: controller.enqueueSync,
                 onAddFolder: () => _openFolderPicker(context, ref),
                 onClearCache: controller.clearCache,
-                onPause: state.scanProgress?.canPause == true
-                    ? () => controller.pauseSync(state.scanProgress!.jobId)
+                onPause: state.syncProgress?.canPause == true
+                    ? () => controller.pauseSync(state.syncProgress!.jobId)
                     : null,
-                onResume: state.scanProgress?.canResume == true
-                    ? () => controller.resumeSync(state.scanProgress!.jobId)
+                onResume: state.syncProgress?.canResume == true
+                    ? () => controller.resumeSync(state.syncProgress!.jobId)
                     : null,
-                onCancel: state.scanProgress?.canCancel == true
-                    ? () => controller.cancelSync(state.scanProgress!.jobId)
+                onCancel: state.syncProgress?.canCancel == true
+                    ? () => controller.cancelSync(state.syncProgress!.jobId)
                     : null,
               );
               final foldersSection = _FoldersSection(
@@ -122,9 +122,8 @@ class GoogleDriveSettingsScreen extends HookConsumerWidget {
       showDragHandle: true,
       backgroundColor: Colors.transparent,
       builder: (context) => _DriveFolderPickerSheet(
-        onLoadFolders: (parentId) => ref
-            .read(googleDriveControllerProvider.notifier)
-            .listFolders(parentId: parentId),
+        onLoadFolders: (parentId) =>
+            ref.read(driveCommandsProvider).listFolders(parentId: parentId),
       ),
     );
 
@@ -132,9 +131,7 @@ class GoogleDriveSettingsScreen extends HookConsumerWidget {
       return;
     }
 
-    await ref
-        .read(googleDriveControllerProvider.notifier)
-        .addRoot(selectedFolder);
+    await ref.read(driveCommandsProvider).addRoot(selectedFolder);
     if (!context.mounted) {
       return;
     }
@@ -176,7 +173,7 @@ class _EntranceReveal extends StatelessWidget {
 class _DriveHero extends StatelessWidget {
   const _DriveHero({required this.state});
 
-  final GoogleDriveState state;
+  final DriveWorkspaceState state;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +253,7 @@ class _DriveHero extends StatelessWidget {
                     label: statusLabel,
                     icon: _heroStatusIcon(state),
                     highlight:
-                        state.requiresReconnect || state.scanProgress != null,
+                        state.requiresReconnect || state.syncProgress != null,
                   ),
                 ],
               ),
@@ -328,7 +325,7 @@ class _DriveHero extends StatelessWidget {
     );
   }
 
-  String _heroTitle(GoogleDriveState state) {
+  String _heroTitle(DriveWorkspaceState state) {
     if (state.hasLinkedAccount) {
       return state.account!.displayName;
     }
@@ -338,7 +335,7 @@ class _DriveHero extends StatelessWidget {
     return 'Connect your library';
   }
 
-  String _heroSupportText(GoogleDriveState state) {
+  String _heroSupportText(DriveWorkspaceState state) {
     if (!state.isConfigured) {
       return state.configurationMessage ??
           'Google Drive is not configured for this build yet.';
@@ -349,8 +346,8 @@ class _DriveHero extends StatelessWidget {
     if (state.requiresReconnect) {
       return 'Your saved session needs attention before Aero Stream can continue syncing the folders already selected.';
     }
-    if (state.scanProgress != null) {
-      return _phaseSubtitle(state.scanProgress!);
+    if (state.syncProgress != null) {
+      return _phaseSubtitle(state.syncProgress!);
     }
     if (state.roots.isEmpty) {
       return 'Choose the folders you want Aero Stream to keep nearby, then start the first sync whenever you are ready.';
@@ -358,7 +355,7 @@ class _DriveHero extends StatelessWidget {
     return 'Connected and ready to pull the next round of Drive changes into your local library.';
   }
 
-  String? _heroBannerMessage(GoogleDriveState state) {
+  String? _heroBannerMessage(DriveWorkspaceState state) {
     if (state.requiresReconnect) {
       return state.authErrorMessage ?? driveSyncReconnectRequiredMessage;
     }
@@ -369,12 +366,12 @@ class _DriveHero extends StatelessWidget {
 class _LiveSyncPanel extends StatelessWidget {
   const _LiveSyncPanel({required this.state});
 
-  final GoogleDriveState state;
+  final DriveWorkspaceState state;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final progress = state.scanProgress;
+    final progress = state.syncProgress;
 
     return Container(
       width: double.infinity,
@@ -437,7 +434,7 @@ class _LiveSyncPanel extends StatelessWidget {
     );
   }
 
-  String _idleStatusLabel(GoogleDriveState state) {
+  String _idleStatusLabel(DriveWorkspaceState state) {
     if (!state.isConfigured) {
       return 'Unavailable';
     }
@@ -453,7 +450,7 @@ class _LiveSyncPanel extends StatelessWidget {
     return 'Ready';
   }
 
-  IconData _idleStatusIcon(GoogleDriveState state) {
+  IconData _idleStatusIcon(DriveWorkspaceState state) {
     if (!state.isConfigured) {
       return Icons.cloud_off_rounded;
     }
@@ -473,7 +470,7 @@ class _LiveSyncPanel extends StatelessWidget {
 class _IdleSyncContent extends StatelessWidget {
   const _IdleSyncContent({super.key, required this.state});
 
-  final GoogleDriveState state;
+  final DriveWorkspaceState state;
 
   @override
   Widget build(BuildContext context) {
@@ -503,7 +500,7 @@ class _IdleSyncContent extends StatelessWidget {
     );
   }
 
-  String _idleTitle(GoogleDriveState state) {
+  String _idleTitle(DriveWorkspaceState state) {
     if (!state.isConfigured) {
       return 'Configuration needed';
     }
@@ -519,7 +516,7 @@ class _IdleSyncContent extends StatelessWidget {
     return 'Ready for your next sync';
   }
 
-  String _idleSubtitle(GoogleDriveState state) {
+  String _idleSubtitle(DriveWorkspaceState state) {
     if (!state.isConfigured) {
       return state.configurationMessage ??
           'This desktop build is missing the Google Drive configuration needed to connect.';
@@ -540,7 +537,7 @@ class _IdleSyncContent extends StatelessWidget {
 class _ActiveSyncContent extends StatelessWidget {
   const _ActiveSyncContent({super.key, required this.progress});
 
-  final ScanProgress progress;
+  final DriveSyncProgress progress;
 
   @override
   Widget build(BuildContext context) {
@@ -623,7 +620,7 @@ class _ControlDock extends StatelessWidget {
     required this.onCancel,
   });
 
-  final GoogleDriveState state;
+  final DriveWorkspaceState state;
   final Future<void> Function() onConnect;
   final Future<void> Function() onDisconnect;
   final Future<void> Function() onSync;
@@ -659,7 +656,7 @@ class _ControlDock extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          if (state.scanProgress != null) ...[
+          if (state.syncProgress != null) ...[
             const SizedBox(height: 14),
             Text(
               'Sync controls',
@@ -774,7 +771,7 @@ class _ControlDock extends StatelessWidget {
 class _FoldersSection extends StatelessWidget {
   const _FoldersSection({required this.state, required this.onRemove});
 
-  final GoogleDriveState state;
+  final DriveWorkspaceState state;
   final Future<void> Function(int rootId) onRemove;
 
   @override
@@ -1634,7 +1631,7 @@ class _DriveFolderPickerSheetState extends State<_DriveFolderPickerSheet> {
   }
 }
 
-String _heroStatusLabel(GoogleDriveState state) {
+String _heroStatusLabel(DriveWorkspaceState state) {
   if (!state.isConfigured) {
     return 'Unavailable';
   }
@@ -1644,13 +1641,13 @@ String _heroStatusLabel(GoogleDriveState state) {
   if (state.requiresReconnect) {
     return 'Reconnect required';
   }
-  if (state.scanProgress != null) {
-    return _jobStateLabel(state.scanProgress!);
+  if (state.syncProgress != null) {
+    return _jobStateLabel(state.syncProgress!);
   }
   return state.roots.isEmpty ? 'Choose folders' : 'Ready';
 }
 
-IconData _heroStatusIcon(GoogleDriveState state) {
+IconData _heroStatusIcon(DriveWorkspaceState state) {
   if (!state.isConfigured) {
     return Icons.cloud_off_rounded;
   }
@@ -1660,8 +1657,8 @@ IconData _heroStatusIcon(GoogleDriveState state) {
   if (state.requiresReconnect) {
     return Icons.sync_problem_rounded;
   }
-  if (state.scanProgress != null) {
-    return state.scanProgress!.isPaused
+  if (state.syncProgress != null) {
+    return state.syncProgress!.isPaused
         ? Icons.pause_circle_outline_rounded
         : Icons.sync_rounded;
   }
@@ -1670,7 +1667,7 @@ IconData _heroStatusIcon(GoogleDriveState state) {
       : Icons.check_circle_outline_rounded;
 }
 
-String _jobStateLabel(ScanProgress progress) {
+String _jobStateLabel(DriveSyncProgress progress) {
   if (progress.isPaused) {
     return 'Paused';
   }
@@ -1695,7 +1692,7 @@ String _phaseTitle(String phase) {
   };
 }
 
-String _phaseSubtitle(ScanProgress progress) {
+String _phaseSubtitle(DriveSyncProgress progress) {
   if (progress.isPaused) {
     return 'The current sync is paused. Resume when you want Aero Stream to continue the next phase.';
   }

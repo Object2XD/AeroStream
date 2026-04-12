@@ -1,12 +1,18 @@
 import 'package:aero_stream/core/providers/drive/drive_providers.dart';
 import 'package:aero_stream/core/theme/app_theme.dart';
 import 'package:aero_stream/data/database/app_database.dart';
+import 'package:aero_stream/data/drive/drive_auth_repository.dart';
 import 'package:aero_stream/data/drive/drive_entities.dart';
+import 'package:aero_stream/data/drive/drive_http_client.dart';
+import 'package:aero_stream/data/drive/drive_library_repository.dart';
+import 'package:aero_stream/data/drive/drive_scan_runner.dart';
 import 'package:aero_stream/data/drive/drive_scan_models.dart';
 import 'package:aero_stream/screens/info/google_drive/google_drive_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+import 'support/drive_test_helpers.dart';
 
 void main() {
   group('formatCompactCount', () {
@@ -24,13 +30,13 @@ void main() {
   testWidgets(
     'Google Drive settings shows reconnect-required state without raw storage paths',
     (WidgetTester tester) async {
-      final controller = _TestGoogleDriveController(
-        _buildState(
+      final commands = _TestDriveCommands(
+        buildWorkspaceState(
           canAccessDrive: false,
           requiresReconnect: true,
           authErrorMessage: driveSyncReconnectRequiredMessage,
           roots: [
-            _buildRoot(
+            buildRoot(
               syncState: DriveScanJobState.failed.value,
               lastError:
                   r"PathAccessException: Cannot delete file, path = 'c:\users\object2xd\appdata\roaming\com.example\aero_stream\flutter_secure_storage.dat'",
@@ -39,7 +45,7 @@ void main() {
         ),
       );
 
-      await _pumpScreen(tester, controller);
+      await _pumpScreen(tester, commands);
 
       expect(find.text('Listener'), findsOneWidget);
       expect(find.byTooltip('Reconnect'), findsOneWidget);
@@ -65,10 +71,10 @@ void main() {
   testWidgets(
     'Google Drive settings shows compact live sync metrics and icon-only controls',
     (WidgetTester tester) async {
-      final controller = _TestGoogleDriveController(
-        _buildState(
-          roots: [_buildRoot()],
-          scanProgress: const ScanProgress(
+      final commands = _TestDriveCommands(
+        buildWorkspaceState(
+          roots: [buildRoot()],
+          syncProgress: const DriveSyncProgress(
             jobId: 42,
             phase: 'metadata_enrichment',
             state: 'running',
@@ -81,7 +87,7 @@ void main() {
         ),
       );
 
-      await _pumpScreen(tester, controller);
+      await _pumpScreen(tester, commands);
 
       expect(find.text('Extracting metadata'), findsOneWidget);
       expect(find.byTooltip('Indexed 93,046'), findsOneWidget);
@@ -115,10 +121,10 @@ void main() {
   testWidgets(
     'Google Drive settings shows 0.0 Meta/s while a running sync is stalled',
     (WidgetTester tester) async {
-      final controller = _TestGoogleDriveController(
-        _buildState(
-          roots: [_buildRoot()],
-          scanProgress: const ScanProgress(
+      final commands = _TestDriveCommands(
+        buildWorkspaceState(
+          roots: [buildRoot()],
+          syncProgress: const DriveSyncProgress(
             jobId: 42,
             phase: 'metadata_enrichment',
             state: 'running',
@@ -131,7 +137,7 @@ void main() {
         ),
       );
 
-      await _pumpScreen(tester, controller);
+      await _pumpScreen(tester, commands);
 
       expect(find.byTooltip('Meta/s 0.0/s'), findsOneWidget);
       expect(find.text('0.0/s'), findsOneWidget);
@@ -141,10 +147,10 @@ void main() {
   testWidgets('Google Drive settings hides speed metric while sync is paused', (
     WidgetTester tester,
   ) async {
-    final controller = _TestGoogleDriveController(
-      _buildState(
-        roots: [_buildRoot(syncState: DriveScanJobState.paused.value)],
-        scanProgress: const ScanProgress(
+    final commands = _TestDriveCommands(
+      buildWorkspaceState(
+        roots: [buildRoot(syncState: DriveScanJobState.paused.value)],
+        syncProgress: const DriveSyncProgress(
           jobId: 42,
           phase: 'metadata_enrichment',
           state: 'paused',
@@ -157,7 +163,7 @@ void main() {
       ),
     );
 
-    await _pumpScreen(tester, controller);
+    await _pumpScreen(tester, commands);
 
     expect(find.byTooltip('Meta/s 12.4/s'), findsNothing);
     expect(find.text('12.4/s'), findsNothing);
@@ -166,10 +172,10 @@ void main() {
   testWidgets(
     'Google Drive settings still hides a stalled speed metric while sync is paused',
     (WidgetTester tester) async {
-      final controller = _TestGoogleDriveController(
-        _buildState(
-          roots: [_buildRoot(syncState: DriveScanJobState.paused.value)],
-          scanProgress: const ScanProgress(
+      final commands = _TestDriveCommands(
+        buildWorkspaceState(
+          roots: [buildRoot(syncState: DriveScanJobState.paused.value)],
+          syncProgress: const DriveSyncProgress(
             jobId: 42,
             phase: 'metadata_enrichment',
             state: 'paused',
@@ -182,7 +188,7 @@ void main() {
         ),
       );
 
-      await _pumpScreen(tester, controller);
+      await _pumpScreen(tester, commands);
 
       expect(find.byTooltip('Meta/s 0.0/s'), findsNothing);
       expect(find.text('0.0/s'), findsNothing);
@@ -192,8 +198,8 @@ void main() {
   testWidgets(
     'Google Drive settings shows disconnected empty state with connect action',
     (WidgetTester tester) async {
-      final controller = _TestGoogleDriveController(
-        _buildState(
+      final commands = _TestDriveCommands(
+        buildWorkspaceState(
           hasLinkedAccount: false,
           canAccessDrive: false,
           account: null,
@@ -201,7 +207,7 @@ void main() {
         ),
       );
 
-      await _pumpScreen(tester, controller);
+      await _pumpScreen(tester, commands);
 
       expect(find.text('Connect your library'), findsOneWidget);
       expect(find.byTooltip('Connect account'), findsOneWidget);
@@ -220,8 +226,8 @@ void main() {
   testWidgets(
     'folder picker follows navigation and confirms the selected folder',
     (WidgetTester tester) async {
-      final controller = _TestGoogleDriveController(
-        _buildState(roots: const []),
+      final commands = _TestDriveCommands(
+        buildWorkspaceState(roots: const []),
         foldersByParent: <String, List<DriveFolderEntry>>{
           'root': const [
             DriveFolderEntry(id: 'music', name: 'Music', parentId: 'root'),
@@ -232,7 +238,7 @@ void main() {
         },
       );
 
-      await _pumpScreen(tester, controller);
+      await _pumpScreen(tester, commands);
 
       final addFolderFinder = _iconButtonWithTooltip('Add folder');
       await tester.ensureVisible(addFolderFinder);
@@ -256,8 +262,8 @@ void main() {
       await tester.tap(_iconButtonWithTooltip('Use current folder'));
       await tester.pumpAndSettle();
 
-      expect(controller.addedFolders, hasLength(1));
-      expect(controller.addedFolders.single.name, 'Music');
+      expect(commands.addedFolders, hasLength(1));
+      expect(commands.addedFolders.single.name, 'Music');
       expect(find.text('Added "Music" to sync roots.'), findsOneWidget);
     },
   );
@@ -265,11 +271,16 @@ void main() {
 
 Future<void> _pumpScreen(
   WidgetTester tester,
-  _TestGoogleDriveController controller,
+  _TestDriveCommands commands,
 ) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [googleDriveControllerProvider.overrideWith(() => controller)],
+      overrides: [
+        driveWorkspaceProvider.overrideWith(
+          () => FixedDriveWorkspaceNotifier(commands.state),
+        ),
+        driveCommandsProvider.overrideWithValue(commands),
+      ],
       child: MaterialApp(
         theme: buildAeroTheme(),
         home: const GoogleDriveSettingsScreen(),
@@ -285,80 +296,41 @@ Finder _iconButtonWithTooltip(String tooltip) {
   );
 }
 
-GoogleDriveState _buildState({
-  bool isConfigured = true,
-  DriveAccountProfile? account = const DriveAccountProfile(
-    providerAccountId: 'drive-account',
-    email: 'listener@example.com',
-    displayName: 'Listener',
-    authKind: 'oauth_desktop',
-  ),
-  bool hasLinkedAccount = true,
-  bool canAccessDrive = true,
-  bool requiresReconnect = false,
-  String? authErrorMessage,
-  List<SyncRoot> roots = const <SyncRoot>[],
-  int cacheSizeBytes = 0,
-  ScanProgress? scanProgress,
-  bool isMutating = false,
-  String? configurationMessage,
-  String? errorMessage,
-}) {
-  return GoogleDriveState(
-    isConfigured: isConfigured,
-    account: account,
-    hasLinkedAccount: hasLinkedAccount,
-    canAccessDrive: canAccessDrive,
-    requiresReconnect: requiresReconnect,
-    authErrorMessage: authErrorMessage,
-    roots: roots,
-    cacheSizeBytes: cacheSizeBytes,
-    scanProgress: scanProgress,
-    isMutating: isMutating,
-    configurationMessage: configurationMessage,
-    errorMessage: errorMessage,
-  );
-}
+class _TestDriveCommands extends DriveCommands {
+  factory _TestDriveCommands(
+    DriveWorkspaceState state, {
+    Map<String, List<DriveFolderEntry>> foldersByParent = const {},
+  }) {
+    final database = makeTestDatabase();
+    final authRepository = NoOpDriveAuthRepository();
+    return _TestDriveCommands._(
+      state: state,
+      database: database,
+      foldersByParent: foldersByParent,
+      authRepository: authRepository,
+    );
+  }
 
-SyncRoot _buildRoot({
-  int id = 1,
-  int accountId = 1,
-  String folderId = 'folder-1',
-  String folderName = 'google_play_music',
-  String syncState = 'running',
-  DateTime? lastSyncedAt,
-  String? lastError,
-  int indexedCount = 93046,
-  int metadataReadyCount = 5247,
-  int artworkReadyCount = 73,
-  int failedCount = 0,
-}) {
-  return SyncRoot(
-    id: id,
-    accountId: accountId,
-    folderId: folderId,
-    folderName: folderName,
-    parentFolderId: null,
-    syncState: syncState,
-    lastSyncedAt: lastSyncedAt,
-    lastError: lastError,
-    activeJobId: null,
-    indexedCount: indexedCount,
-    metadataReadyCount: metadataReadyCount,
-    artworkReadyCount: artworkReadyCount,
-    failedCount: failedCount,
-  );
-}
+  _TestDriveCommands._({
+    required this.state,
+    required AppDatabase database,
+    required this.foldersByParent,
+    required DriveAuthRepository authRepository,
+  }) : super(
+         database: database,
+         authRepository: authRepository,
+         httpClient: DriveHttpClient(authRepository: authRepository),
+         libraryRepository: DriveLibraryRepository(database),
+         runner: RecordingDriveScanRunner(
+           database: database,
+           authRepository: authRepository,
+         ),
+         workspace: FixedDriveWorkspaceNotifier(state),
+       );
 
-class _TestGoogleDriveController extends GoogleDriveController {
-  _TestGoogleDriveController(this._state, {this.foldersByParent = const {}});
-
-  final GoogleDriveState _state;
+  final DriveWorkspaceState state;
   final Map<String, List<DriveFolderEntry>> foldersByParent;
   final List<DriveFolderEntry> addedFolders = <DriveFolderEntry>[];
-
-  @override
-  Future<GoogleDriveState> build() async => _state;
 
   @override
   Future<void> connect() async {}
