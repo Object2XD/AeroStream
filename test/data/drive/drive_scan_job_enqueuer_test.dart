@@ -1,8 +1,10 @@
 import 'package:aero_stream/data/database/app_database.dart';
 import 'package:aero_stream/data/drive/drive_metadata_catch_up_planner.dart';
+import 'package:aero_stream/data/drive/drive_entities.dart';
 import 'package:aero_stream/data/drive/drive_scan_job_enqueuer.dart';
 import 'package:aero_stream/data/drive/drive_scan_logger.dart';
 import 'package:aero_stream/data/drive/drive_scan_models.dart';
+import 'package:aero_stream/data/drive/drive_auth_repository.dart';
 import 'package:aero_stream/data/drive/drive_scan_phase_codec.dart';
 import 'package:aero_stream/data/drive/drive_scan_root_binder.dart';
 import 'package:aero_stream/data/drive/drive_scan_root_resolver.dart';
@@ -54,17 +56,50 @@ void main() {
     expect(job.phase, DriveScanPhase.baselineDiscovery.value);
   });
 
-  test('enqueueSync reuses active job and keeps single active job id', () async {
+  test(
+    'enqueueSync reuses active job and keeps single active job id',
+    () async {
+      final account = await _seedAccount(
+        database,
+        driveStartPageToken: 'start-token',
+      );
+      await _seedRoot(database, accountId: account.id, folderId: 'root-folder');
+
+      final first = await enqueuer.enqueueSync(
+        autoRun: false,
+        ensureRunner: () {},
+      );
+      final second = await enqueuer.enqueueSync(
+        autoRun: false,
+        ensureRunner: () {},
+      );
+
+      expect(second, first);
+    },
+  );
+
+  test('enqueueSync rejects reconnect-required accounts', () async {
     final account = await _seedAccount(
       database,
       driveStartPageToken: 'start-token',
     );
-    await _seedRoot(database, accountId: account.id, folderId: 'root-folder');
+    await database.updateAccountAuthSession(
+      account.id,
+      authSessionStateValue: DriveAuthSessionState.reauthRequired.value,
+      authSessionErrorValue: driveAuthReconnectRequiredMessage,
+    );
 
-    final first = await enqueuer.enqueueSync(autoRun: false, ensureRunner: () {});
-    final second = await enqueuer.enqueueSync(autoRun: false, ensureRunner: () {});
-
-    expect(second, first);
+    await expectLater(
+      enqueuer.enqueueSync(autoRun: false, ensureRunner: () {}),
+      throwsA(
+        isA<DriveAuthException>().having(
+          (error) => error.message,
+          'message',
+          driveAuthReconnectRequiredMessage,
+        ),
+      ),
+    );
+    expect(await database.getLatestActiveScanJob(), equals(null));
   });
 }
 

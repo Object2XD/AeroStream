@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../database/app_database.dart';
 import 'drive_auth_repository.dart';
+import 'drive_entities.dart';
 import 'drive_http_client.dart';
 import 'drive_metadata_catch_up_planner.dart';
 import 'drive_scan_logger.dart';
@@ -42,6 +43,18 @@ class DriveScanJobEnqueuer {
         message: 'Google Drive is not connected.',
       );
       throw const DriveAuthException('Connect Google Drive first.');
+    }
+    if (account.authSessionState ==
+        DriveAuthSessionState.reauthRequired.value) {
+      _logWarning(
+        'job_enqueue_blocked',
+        details: <String, Object?>{
+          'accountId': account.id,
+          'reason': 'reauth_required',
+        },
+        message: driveAuthReconnectRequiredMessage,
+      );
+      throw const DriveAuthException(driveAuthReconnectRequiredMessage);
     }
 
     final existingJob = await _database.getLatestActiveScanJob(
@@ -151,11 +164,10 @@ class DriveScanJobEnqueuer {
       accountId: account.id,
     );
 
-    await _rootBinder.attachRootsToJob(
-      jobId,
-      <int>{...roots.map((root) => root.id), ...catchUpPlan.affectedRootIds},
-      syncStateValue: DriveScanJobState.queued.value,
-    );
+    await _rootBinder.attachRootsToJob(jobId, <int>{
+      ...roots.map((root) => root.id),
+      ...catchUpPlan.affectedRootIds,
+    }, syncStateValue: DriveScanJobState.queued.value);
 
     if (autoRun) {
       ensureRunner();

@@ -24,6 +24,12 @@ class DriveAuthException implements Exception {
   String toString() => 'DriveAuthException($message)';
 }
 
+class DriveAuthSessionExpiredException extends DriveAuthException {
+  const DriveAuthSessionExpiredException([
+    super.message = driveAuthReconnectRequiredMessage,
+  ]);
+}
+
 DriveAuthException createGoogleApiException({
   required String context,
   required http.Response response,
@@ -122,10 +128,12 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
     DriveScanLogger logger = const NoOpDriveScanLogger(),
     Future<oauth2.Client> Function()? desktopClientFactory,
     Future<DriveAccountProfile> Function(http.Client client)? profileLoader,
+    Future<void> Function()? onDesktopSessionInvalidated,
   }) : _secureStorage = secureStorage,
        _logger = logger,
        _desktopClientFactory = desktopClientFactory,
-       _profileLoader = profileLoader;
+       _profileLoader = profileLoader,
+       _onDesktopSessionInvalidated = onDesktopSessionInvalidated;
 
   final DriveOAuthConfig config;
   final FlutterSecureStorage _secureStorage;
@@ -133,6 +141,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
   final Future<oauth2.Client> Function()? _desktopClientFactory;
   final Future<DriveAccountProfile> Function(http.Client client)?
   _profileLoader;
+  final Future<void> Function()? _onDesktopSessionInvalidated;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
@@ -145,6 +154,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
   GoogleSignInAccount? _currentGoogleUser;
   oauth2.Client? _desktopClient;
   Future<void> _desktopStorageSequence = Future<void>.value();
+  bool _desktopSessionInvalidated = false;
 
   @override
   bool get isConfigured => config.isConfiguredForCurrentPlatform;
@@ -258,6 +268,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
       details: const <String, Object?>{'authKind': 'oauth_desktop'},
     );
     _desktopClient = _buildDesktopClient(credentials);
+    _desktopSessionInvalidated = false;
 
     final profile = await _readStoredDesktopProfile();
     if (profile != null) {
@@ -348,6 +359,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
         await (_desktopClientFactory?.call() ?? _createDesktopClient());
     _desktopClient?.close();
     _desktopClient = client;
+    _desktopSessionInvalidated = false;
 
     final profile = await _fetchProfileWithClient(client);
     await _persistDesktopCredentials(
@@ -384,6 +396,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
 
     _desktopClient?.close();
     _desktopClient = null;
+    _desktopSessionInvalidated = false;
     try {
       await _withDesktopStorageLock(() => _secureStorage.deleteAll());
       _logger.info(
@@ -462,6 +475,9 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
         details: const <String, Object?>{'authKind': 'oauth_desktop'},
         message: 'Desktop OAuth client is not available.',
       );
+      if (_desktopSessionInvalidated) {
+        throw const DriveAuthSessionExpiredException();
+      }
       throw const DriveAuthException('Google Drive is not connected.');
     }
 
@@ -481,6 +497,9 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
         error: error,
         stackTrace: stackTrace,
       );
+      if (_isRuntimeDesktopSessionExpired(error)) {
+        throw await _invalidateDesktopSession(error);
+      }
       rethrow;
     }
   }
@@ -524,6 +543,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
       return null;
     }
     _desktopClient = client;
+    _desktopSessionInvalidated = false;
     _logger.info(
       prefix: 'DriveAuth',
       subsystem: 'auth',
@@ -832,6 +852,7 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
     );
     _desktopClient?.close();
     _desktopClient = null;
+    _desktopSessionInvalidated = false;
 
     try {
       await _secureStorage.deleteAll();
@@ -862,6 +883,53 @@ class PlatformDriveAuthRepository implements DriveAuthRepository {
       }
     });
     return completer.future;
+  }
+
+  bool _isRuntimeDesktopSessionExpired(Object error) {
+    return error is oauth2.AuthorizationException &&
+        error.error == 'invalid_grant';
+  }
+
+  Future<DriveAuthSessionExpiredException> _invalidateDesktopSession(
+    Object error,
+  ) async {
+    final shouldNotify = await _withDesktopStorageLock(() async {
+      final wasInvalidated = _desktopSessionInvalidated;
+      _desktopSessionInvalidated = true;
+      _desktopClient?.close();
+      _desktopClient = null;
+      await _deleteDesktopSessionKeysLocked(error);
+      _logger.warning(
+        prefix: 'DriveAuth',
+        subsystem: 'auth',
+        operation: 'desktop_session_invalidated',
+        details: const <String, Object?>{'authKind': 'oauth_desktop'},
+        error: error,
+      );
+      return !wasInvalidated;
+    });
+    if (shouldNotify) {
+      await _onDesktopSessionInvalidated?.call();
+    }
+    return const DriveAuthSessionExpiredException();
+  }
+
+  Future<void> _deleteDesktopSessionKeysLocked(Object error) async {
+    try {
+      await _deleteDesktopSecureValueLocked(_desktopCredentialsKey);
+      await _deleteDesktopSecureValueLocked(_desktopProfileIdKey);
+      await _deleteDesktopSecureValueLocked(_desktopProfileEmailKey);
+      await _deleteDesktopSecureValueLocked(_desktopProfileNameKey);
+    } catch (deleteError, deleteStackTrace) {
+      if (!_isRecoverableDesktopStorageError(deleteError)) {
+        Error.throwWithStackTrace(deleteError, deleteStackTrace);
+      }
+      await _clearCorruptedDesktopSessionLocked(error);
+    }
+  }
+
+  Future<void> _deleteDesktopSecureValueLocked(String key) {
+    return _secureStorage.delete(key: key);
   }
 
   bool _isRecoverableDesktopStorageError(Object error) {

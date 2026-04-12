@@ -199,6 +199,151 @@ void main() {
   );
 
   test(
+    'controller marks reconnect required when listFolders hits runtime auth expiry',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+
+      await database.setActiveAccount(
+        SyncAccountsCompanion.insert(
+          providerAccountId: 'drive-account',
+          email: 'listener@example.com',
+          displayName: 'Listener',
+          authKind: 'oauth_desktop',
+          connectedAt: DateTime(2026, 3, 31),
+          authSessionState: Value(DriveAuthSessionState.ready.value),
+          authSessionError: const Value(null),
+        ),
+      );
+
+      final authRepository = _FakeDriveAuthRepository(
+        restoreSessionResult: const DriveAccountProfile(
+          providerAccountId: 'drive-account',
+          email: 'listener@example.com',
+          displayName: 'Listener',
+          authKind: 'oauth_desktop',
+        ),
+      );
+      final runner = _RecordingDriveScanRunner(
+        database: database,
+        authRepository: authRepository,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          driveAuthRepositoryProvider.overrideWithValue(authRepository),
+          driveHttpClientProvider.overrideWithValue(
+            _ExpiredSessionDriveHttpClient(),
+          ),
+          driveScanRunnerProvider.overrideWithValue(runner),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(googleDriveControllerProvider.future);
+
+      await expectLater(
+        container.read(googleDriveControllerProvider.notifier).listFolders(),
+        throwsA(
+          isA<DriveAuthException>().having(
+            (error) => error.message,
+            'message',
+            driveAuthReconnectRequiredMessage,
+          ),
+        ),
+      );
+
+      final state = container.read(googleDriveControllerProvider).value!;
+      final account = (await database.getActiveAccount())!;
+      expect(state.requiresReconnect, isTrue);
+      expect(state.canAccessDrive, isFalse);
+      expect(state.errorMessage, driveAuthReconnectRequiredMessage);
+      expect(
+        account.authSessionState,
+        DriveAuthSessionState.reauthRequired.value,
+      );
+    },
+  );
+
+  test(
+    'controller marks reconnect required when addRoot hits runtime auth expiry',
+    () async {
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+
+      await database.setActiveAccount(
+        SyncAccountsCompanion.insert(
+          providerAccountId: 'drive-account',
+          email: 'listener@example.com',
+          displayName: 'Listener',
+          authKind: 'oauth_desktop',
+          connectedAt: DateTime(2026, 3, 31),
+          authSessionState: Value(DriveAuthSessionState.ready.value),
+          authSessionError: const Value(null),
+        ),
+      );
+      final account = (await database.getActiveAccount())!;
+      await database.upsertRoot(
+        SyncRootsCompanion.insert(
+          accountId: account.id,
+          folderId: 'existing-root',
+          folderName: 'Existing Root',
+          parentFolderId: const Value('parent-folder'),
+        ),
+      );
+
+      final authRepository = _FakeDriveAuthRepository(
+        restoreSessionResult: const DriveAccountProfile(
+          providerAccountId: 'drive-account',
+          email: 'listener@example.com',
+          displayName: 'Listener',
+          authKind: 'oauth_desktop',
+        ),
+      );
+      final runner = _RecordingDriveScanRunner(
+        database: database,
+        authRepository: authRepository,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          driveAuthRepositoryProvider.overrideWithValue(authRepository),
+          driveHttpClientProvider.overrideWithValue(
+            _ExpiredSessionDriveHttpClient(),
+          ),
+          driveScanRunnerProvider.overrideWithValue(runner),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(googleDriveControllerProvider.future);
+
+      await expectLater(
+        container
+            .read(googleDriveControllerProvider.notifier)
+            .addRoot(
+              const DriveFolderEntry(
+                id: 'new-root',
+                name: 'New Root',
+                parentId: 'root',
+              ),
+            ),
+        throwsA(
+          isA<DriveAuthException>().having(
+            (error) => error.message,
+            'message',
+            driveAuthReconnectRequiredMessage,
+          ),
+        ),
+      );
+
+      final state = container.read(googleDriveControllerProvider).value!;
+      expect(state.requiresReconnect, isTrue);
+      expect(state.errorMessage, driveAuthReconnectRequiredMessage);
+    },
+  );
+
+  test(
     'controller keeps scan speed across cache-triggered reloads until stalled',
     () async {
       final database = AppDatabase(NativeDatabase.memory());
@@ -806,6 +951,45 @@ class _FakeDriveAuthRepository implements DriveAuthRepository {
   @override
   Future<T> withClient<T>(Future<T> Function(http.Client client) action) {
     throw UnimplementedError();
+  }
+}
+
+class _PassiveDriveAuthRepository implements DriveAuthRepository {
+  @override
+  bool get isConfigured => true;
+
+  @override
+  String? get configurationMessage => null;
+
+  @override
+  Future<DriveAccountProfile> connect() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<DriveAccountProfile?> restoreSession() async => null;
+
+  @override
+  Future<T> withClient<T>(Future<T> Function(http.Client client) action) {
+    throw UnimplementedError();
+  }
+}
+
+class _ExpiredSessionDriveHttpClient extends DriveHttpClient {
+  _ExpiredSessionDriveHttpClient()
+    : super(authRepository: _PassiveDriveAuthRepository());
+
+  @override
+  Future<List<DriveFolderEntry>> listFolders({String parentId = 'root'}) async {
+    throw const DriveAuthSessionExpiredException();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getFolderMetadata(String folderId) async {
+    throw const DriveAuthSessionExpiredException();
   }
 }
 

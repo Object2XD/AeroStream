@@ -1407,6 +1407,53 @@ void main() {
     expect(failEntries.single.stackTrace, isNotNull);
   });
 
+  test(
+    'runtime auth expiry preserves reconnect-required job and root state',
+    () async {
+      final logger = RecordingDriveScanLogger();
+      final account = await _seedAccount(
+        database,
+        driveStartPageToken: null,
+        authKind: 'oauth_desktop',
+      );
+      final rootId = await _seedRoot(
+        database,
+        accountId: account.id,
+        folderId: 'root-folder',
+        folderName: 'Library',
+        lastSyncedAt: null,
+      );
+      final httpClient = DriveHttpClient(
+        authRepository: _ExpiringAuthRepository(
+          database: database,
+          accountId: account.id,
+        ),
+        logger: logger,
+      );
+      final runner = _buildRunner(
+        database: database,
+        httpClient: httpClient,
+        autoRun: true,
+        logger: logger,
+      );
+
+      final jobId = await runner.enqueueSync();
+      final job = await _waitForTerminalJob(database, jobId!);
+      final root = await database.getRootById(rootId);
+      final refreshedAccount = await database.getActiveAccount();
+
+      expect(
+        refreshedAccount!.authSessionState,
+        DriveAuthSessionState.reauthRequired.value,
+      );
+      expect(job.state, DriveScanJobState.failed.value);
+      expect(job.lastError, driveSyncReconnectRequiredMessage);
+      expect(root!.lastError, driveSyncReconnectRequiredMessage);
+      expect(logger.containsOperation('job_reauth_required'), isTrue);
+      expect(logger.byOperation('job_fail'), isEmpty);
+    },
+  );
+
   test('successful baseline scan logs phase and runtime transitions', () async {
     final logger = RecordingDriveScanLogger();
     final httpClient = _FakeDriveHttpClient(
@@ -2123,13 +2170,14 @@ DriveScanRunner _buildRunner({
 Future<SyncAccount> _seedAccount(
   AppDatabase database, {
   required String? driveStartPageToken,
+  String authKind = 'test',
 }) async {
   await database.setActiveAccount(
     SyncAccountsCompanion.insert(
       providerAccountId: 'account-1',
       email: 'listener@example.com',
       displayName: 'Listener',
-      authKind: 'test',
+      authKind: authKind,
       connectedAt: DateTime(2026, 3, 30),
       isActive: const Value(true),
       driveStartPageToken: Value(driveStartPageToken),
@@ -2930,6 +2978,40 @@ class _FakeAuthRepository implements DriveAuthRepository {
   @override
   Future<T> withClient<T>(Future<T> Function(http.Client client) action) {
     throw UnimplementedError();
+  }
+}
+
+class _ExpiringAuthRepository implements DriveAuthRepository {
+  _ExpiringAuthRepository({required this.database, required this.accountId});
+
+  final AppDatabase database;
+  final int accountId;
+  var _didExpire = false;
+
+  @override
+  String? get configurationMessage => null;
+
+  @override
+  bool get isConfigured => true;
+
+  @override
+  Future<DriveAccountProfile> connect() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<DriveAccountProfile?> restoreSession() async => null;
+
+  @override
+  Future<T> withClient<T>(Future<T> Function(http.Client client) action) async {
+    if (!_didExpire) {
+      _didExpire = true;
+      await database.markAccountReauthRequired(accountId);
+    }
+    throw const DriveAuthSessionExpiredException();
   }
 }
 

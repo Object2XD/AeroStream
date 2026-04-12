@@ -633,11 +633,26 @@ class DriveLiveBenchmarkRunner {
     _logger.entries.clear();
     _driveHttpClient.resetCounters();
     final stopwatch = Stopwatch()..start();
-    final outcomes = await _runWithConcurrency(
-      tracks,
-      concurrency: command.concurrency,
-      action: (candidate) => _runTrackExtraction(candidate, kind: command.kind),
-    );
+    late final List<_TrackBenchmarkOutcome> outcomes;
+    try {
+      outcomes = await _runWithConcurrency(
+        tracks,
+        concurrency: command.concurrency,
+        action: (candidate) =>
+            _runTrackExtraction(candidate, kind: command.kind),
+      );
+    } on _BenchmarkAuthLossException catch (error) {
+      stopwatch.stop();
+      return _buildUnavailableReport(
+        mode: command.mode,
+        message: error.message,
+        extra: <String, Object?>{
+          'accountEmail': account.email,
+          'lastError': error.message,
+          'authDiagnostics': _collectAuthDiagnostics(),
+        },
+      );
+    }
     stopwatch.stop();
 
     return _summarizeExtractorRun(
@@ -821,6 +836,9 @@ class DriveLiveBenchmarkRunner {
       );
     } catch (error) {
       stopwatch.stop();
+      if (_isBenchmarkAuthLoss(error)) {
+        throw _BenchmarkAuthLossException(_benchmarkFailureMessage(error));
+      }
       return _TrackBenchmarkOperationOutcome.failure(
         kind: DriveBenchmarkKind.metadata.cliValue,
         elapsedMs: stopwatch.elapsedMilliseconds,
@@ -849,6 +867,9 @@ class DriveLiveBenchmarkRunner {
       );
     } catch (error) {
       stopwatch.stop();
+      if (_isBenchmarkAuthLoss(error)) {
+        throw _BenchmarkAuthLossException(_benchmarkFailureMessage(error));
+      }
       return _TrackBenchmarkOperationOutcome.failure(
         kind: DriveBenchmarkKind.artwork.cliValue,
         elapsedMs: stopwatch.elapsedMilliseconds,
@@ -1124,6 +1145,15 @@ class DriveLiveBenchmarkRunner {
     return error.toString();
   }
 
+  bool _isBenchmarkAuthLoss(Object error) {
+    if (error is DriveAuthSessionExpiredException) {
+      return true;
+    }
+    return error is DriveAuthException &&
+        (error.message == driveAuthReconnectRequiredMessage ||
+            error.message == driveSyncReconnectRequiredMessage);
+  }
+
   List<Map<String, Object?>> _collectAuthDiagnostics({int limit = 12}) {
     final authEntries = _logger.bySubsystem('auth').toList(growable: false);
     final start = math.max(0, authEntries.length - limit);
@@ -1200,6 +1230,12 @@ class _TrackBenchmarkOperationOutcome {
   final int elapsedMs;
   final String? reason;
   final String? message;
+}
+
+class _BenchmarkAuthLossException implements Exception {
+  const _BenchmarkAuthLossException(this.message);
+
+  final String message;
 }
 
 Future<int> runDriveBenchmarkCli(List<String> args) async {

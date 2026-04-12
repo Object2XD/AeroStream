@@ -54,10 +54,21 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 });
 
 final driveAuthRepositoryProvider = Provider<DriveAuthRepository>((ref) {
+  final database = ref.watch(appDatabaseProvider);
   return PlatformDriveAuthRepository(
     config: ref.watch(driveOAuthConfigProvider),
     secureStorage: ref.watch(secureStorageProvider),
     logger: ref.watch(driveScanLoggerProvider),
+    onDesktopSessionInvalidated: () async {
+      final account = await database.getActiveAccount();
+      if (account == null ||
+          account.authKind != 'oauth_desktop' ||
+          account.authSessionState ==
+              DriveAuthSessionState.reauthRequired.value) {
+        return;
+      }
+      await database.markAccountReauthRequired(account.id);
+    },
   );
 });
 
@@ -629,19 +640,87 @@ class GoogleDriveController extends AsyncNotifier<GoogleDriveState> {
   ScanSpeedTracker? _scanSpeedTracker;
   int? _taskBacklogJobId;
   int? _metadataPipelineJobId;
+  DriveAuthRepository? _authRepositoryCache;
+  AppDatabase? _databaseCache;
+  DriveHttpClient? _httpClientCache;
+  DriveLibraryRepository? _libraryRepositoryCache;
+  DriveScanRunner? _runnerCache;
+  Duration? _scanSpeedTickIntervalCache;
+  Duration? _scanSpeedRollingWindowCache;
 
-  DriveAuthRepository get _authRepository =>
-      ref.read(driveAuthRepositoryProvider);
-  AppDatabase get _database => ref.read(appDatabaseProvider);
-  DriveHttpClient get _httpClient => ref.read(driveHttpClientProvider);
-  DriveLibraryRepository get _libraryRepository =>
-      ref.read(driveLibraryRepositoryProvider);
-  DriveScanRunner get _runner => ref.read(driveScanRunnerProvider);
-  ScanSpeedTracker get _speedTracker => _scanSpeedTracker ??= ScanSpeedTracker(
-    rollingWindow: ref.read(scanSpeedRollingWindowProvider),
-  );
-  Duration get _scanSpeedTickInterval =>
-      ref.read(scanSpeedTickIntervalProvider);
+  DriveAuthRepository get _authRepository {
+    final cached = _authRepositoryCache;
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = ref.read(driveAuthRepositoryProvider);
+    _authRepositoryCache = resolved;
+    return resolved;
+  }
+
+  AppDatabase get _database {
+    final cached = _databaseCache;
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = ref.read(appDatabaseProvider);
+    _databaseCache = resolved;
+    return resolved;
+  }
+
+  DriveHttpClient get _httpClient {
+    final cached = _httpClientCache;
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = ref.read(driveHttpClientProvider);
+    _httpClientCache = resolved;
+    return resolved;
+  }
+
+  DriveLibraryRepository get _libraryRepository {
+    final cached = _libraryRepositoryCache;
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = ref.read(driveLibraryRepositoryProvider);
+    _libraryRepositoryCache = resolved;
+    return resolved;
+  }
+
+  DriveScanRunner get _runner {
+    final cached = _runnerCache;
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = ref.read(driveScanRunnerProvider);
+    _runnerCache = resolved;
+    return resolved;
+  }
+
+  ScanSpeedTracker get _speedTracker {
+    final cached = _scanSpeedTracker;
+    if (cached != null) {
+      return cached;
+    }
+    final rollingWindow =
+        _scanSpeedRollingWindowCache ??
+        ref.read(scanSpeedRollingWindowProvider);
+    _scanSpeedRollingWindowCache = rollingWindow;
+    final resolved = ScanSpeedTracker(rollingWindow: rollingWindow);
+    _scanSpeedTracker = resolved;
+    return resolved;
+  }
+
+  Duration get _scanSpeedTickInterval {
+    final cached = _scanSpeedTickIntervalCache;
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = ref.read(scanSpeedTickIntervalProvider);
+    _scanSpeedTickIntervalCache = resolved;
+    return resolved;
+  }
 
   @override
   Future<GoogleDriveState> build() async {
@@ -795,22 +874,24 @@ class GoogleDriveController extends AsyncNotifier<GoogleDriveState> {
   }
 
   Future<void> addRoot(DriveFolderEntry folder) async {
-    final account = await _requireDriveAccess();
+    await _runGuardedDriveCall(() async {
+      final account = await _requireDriveAccess();
 
-    await _assertRootDoesNotOverlap(folder);
-    await _database.upsertRoot(
-      SyncRootsCompanion.insert(
-        accountId: account.id,
-        folderId: folder.id,
-        folderName: folder.name,
-        parentFolderId: Value(folder.parentId),
-        syncState: Value(DriveScanJobState.completed.value),
-      ),
-    );
-    final root = await _database.getRootByFolderId(folder.id);
-    if (root != null) {
-      await _runner.enqueueSync(rootId: root.id);
-    }
+      await _assertRootDoesNotOverlap(folder);
+      await _database.upsertRoot(
+        SyncRootsCompanion.insert(
+          accountId: account.id,
+          folderId: folder.id,
+          folderName: folder.name,
+          parentFolderId: Value(folder.parentId),
+          syncState: Value(DriveScanJobState.completed.value),
+        ),
+      );
+      final root = await _database.getRootByFolderId(folder.id);
+      if (root != null) {
+        await _runner.enqueueSync(rootId: root.id);
+      }
+    });
   }
 
   Future<void> removeRoot(int rootId) async {
@@ -823,13 +904,18 @@ class GoogleDriveController extends AsyncNotifier<GoogleDriveState> {
 
   Future<void> enqueueSync() async {
     try {
-      await _requireDriveAccess();
-      await _runner.enqueueSync();
+      await _runGuardedDriveCall(() async {
+        await _requireDriveAccess();
+        await _runner.enqueueSync();
+      });
     } catch (error, stackTrace) {
+      final effectiveError = await _normalizeRuntimeDriveError(error);
       final currentState = state.asData?.value ?? await _loadState();
-      state = AsyncError(error, stackTrace);
+      state = AsyncError(effectiveError, stackTrace);
       state = AsyncData(
-        currentState.copyWith(errorMessage: Value(_errorMessage(error))),
+        currentState.copyWith(
+          errorMessage: Value(_errorMessage(effectiveError)),
+        ),
       );
     }
   }
@@ -847,20 +933,24 @@ class GoogleDriveController extends AsyncNotifier<GoogleDriveState> {
   }
 
   Future<List<DriveFolderEntry>> listFolders({String parentId = 'root'}) async {
-    await _requireDriveAccess();
-    return _httpClient.listFolders(parentId: parentId);
+    return _runGuardedDriveCall(() async {
+      await _requireDriveAccess();
+      return _httpClient.listFolders(parentId: parentId);
+    });
   }
 
   Future<DriveFolderEntry> getFolder(String folderId) async {
-    await _requireDriveAccess();
-    final metadata = await _httpClient.getFolderMetadata(folderId);
-    final parents = metadata['parents'] as List<dynamic>?;
-    final parentIds = parents?.cast<String>() ?? const <String>[];
-    return DriveFolderEntry(
-      id: metadata['id'] as String,
-      name: metadata['name'] as String? ?? 'Folder',
-      parentId: parentIds.isEmpty ? null : parentIds.first,
-    );
+    return _runGuardedDriveCall(() async {
+      await _requireDriveAccess();
+      final metadata = await _httpClient.getFolderMetadata(folderId);
+      final parents = metadata['parents'] as List<dynamic>?;
+      final parentIds = parents?.cast<String>() ?? const <String>[];
+      return DriveFolderEntry(
+        id: metadata['id'] as String,
+        name: metadata['name'] as String? ?? 'Folder',
+        parentId: parentIds.isEmpty ? null : parentIds.first,
+      );
+    });
   }
 
   void _wireSubscriptions() {
@@ -879,6 +969,9 @@ class GoogleDriveController extends AsyncNotifier<GoogleDriveState> {
   }
 
   Future<void> _reloadStatePreservingUiFlags() async {
+    if (!ref.mounted) {
+      return;
+    }
     final currentState = state.asData?.value;
     final nextState = await _loadState(
       isMutating: currentState?.isMutating ?? false,
@@ -1089,6 +1182,53 @@ class GoogleDriveController extends AsyncNotifier<GoogleDriveState> {
       return error.message;
     }
     return error.toString();
+  }
+
+  Future<T> _runGuardedDriveCall<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } catch (error) {
+      final effectiveError = await _normalizeRuntimeDriveError(error);
+      throw effectiveError;
+    }
+  }
+
+  Future<Object> _normalizeRuntimeDriveError(Object error) async {
+    if (!_isReconnectRequiredError(error)) {
+      return error;
+    }
+
+    await _markDesktopReconnectRequiredIfNeeded();
+    final nextState = await _loadState(
+      isMutating: state.asData?.value?.isMutating ?? false,
+      errorMessage: driveAuthReconnectRequiredMessage,
+    );
+    if (ref.mounted) {
+      _syncTaskBacklogSubscription(nextState.scanProgress);
+      _syncMetadataPipelineSubscription(nextState.scanProgress);
+      _syncScanSpeedTimer(nextState.scanProgress);
+      state = AsyncData(nextState);
+    }
+    return const DriveAuthException(driveAuthReconnectRequiredMessage);
+  }
+
+  bool _isReconnectRequiredError(Object error) {
+    if (error is DriveAuthSessionExpiredException) {
+      return true;
+    }
+    return error is DriveAuthException &&
+        error.message == driveAuthReconnectRequiredMessage;
+  }
+
+  Future<void> _markDesktopReconnectRequiredIfNeeded() async {
+    final account = await _database.getActiveAccount();
+    if (account == null ||
+        account.authKind != 'oauth_desktop' ||
+        account.authSessionState ==
+            DriveAuthSessionState.reauthRequired.value) {
+      return;
+    }
+    await _database.markAccountReauthRequired(account.id);
   }
 
   Future<void> _assertRootDoesNotOverlap(DriveFolderEntry folder) async {

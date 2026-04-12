@@ -111,30 +111,33 @@ void main() {
     },
   );
 
-  test('desktop restoreSession logs session-missing recovery context', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+  test(
+    'desktop restoreSession logs session-missing recovery context',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-    final storage = _ThrowingSecureStorage(
-      error: const FormatException('corrupt secure storage'),
-    );
-    final logger = RecordingDriveScanLogger();
-    final repository = PlatformDriveAuthRepository(
-      config: const DriveOAuthConfig(
-        clientId: 'desktop-client-id',
-        serverClientId: '',
-        clientSecret: '',
-      ),
-      secureStorage: storage,
-      logger: logger,
-    );
+      final storage = _ThrowingSecureStorage(
+        error: const FormatException('corrupt secure storage'),
+      );
+      final logger = RecordingDriveScanLogger();
+      final repository = PlatformDriveAuthRepository(
+        config: const DriveOAuthConfig(
+          clientId: 'desktop-client-id',
+          serverClientId: '',
+          clientSecret: '',
+        ),
+        secureStorage: storage,
+        logger: logger,
+      );
 
-    await repository.restoreSession();
+      await repository.restoreSession();
 
-    final lines = logger.joinedLines();
-    expect(lines, contains('DriveAuth secure_storage_recovery'));
-    expect(lines, contains('authKind="oauth_desktop"'));
-  });
+      final lines = logger.joinedLines();
+      expect(lines, contains('DriveAuth secure_storage_recovery'));
+      expect(lines, contains('authKind="oauth_desktop"'));
+    },
+  );
 
   test(
     'desktop restoreSession treats secure storage file access errors as recoverable',
@@ -226,6 +229,118 @@ void main() {
       expect(profile.email, expectedProfile.email);
       expect(storage.deleteAllCount, 1);
       expect(storage.successfulWrites, 4);
+    },
+  );
+
+  test(
+    'desktop withClient invalidates runtime session on invalid_grant',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final storage = _MapSecureStorage(
+        values: <String, String>{
+          'drive.desktop.credentials': oauth2.Credentials(
+            'access-token',
+            refreshToken: 'refresh-token',
+            tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
+          ).toJson(),
+          'drive.desktop.profile.id': 'account-1',
+          'drive.desktop.profile.email': 'listener@example.com',
+          'drive.desktop.profile.name': 'Listener',
+        },
+      );
+      var invalidationCount = 0;
+      final repository = PlatformDriveAuthRepository(
+        config: const DriveOAuthConfig(
+          clientId: 'desktop-client-id',
+          serverClientId: '',
+          clientSecret: '',
+        ),
+        secureStorage: storage,
+        onDesktopSessionInvalidated: () async {
+          invalidationCount += 1;
+        },
+      );
+
+      final profile = await repository.restoreSession();
+      expect(profile, isNotNull);
+
+      await expectLater(
+        repository.withClient((_) async {
+          throw oauth2.AuthorizationException(
+            'invalid_grant',
+            'Token has been expired or revoked.',
+            null,
+          );
+        }),
+        throwsA(isA<DriveAuthSessionExpiredException>()),
+      );
+
+      expect(invalidationCount, 1);
+      expect(
+        storage.deletedKeys,
+        containsAll(<String>[
+          'drive.desktop.credentials',
+          'drive.desktop.profile.id',
+          'drive.desktop.profile.email',
+          'drive.desktop.profile.name',
+        ]),
+      );
+      expect(storage.deleteAllCount, 0);
+      await expectLater(
+        repository.withClient((_) async => 'ok'),
+        throwsA(isA<DriveAuthSessionExpiredException>()),
+      );
+    },
+  );
+
+  test(
+    'desktop withClient keeps session for non invalid_grant auth failures',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final storage = _MapSecureStorage(
+        values: <String, String>{
+          'drive.desktop.credentials': oauth2.Credentials(
+            'access-token',
+            refreshToken: 'refresh-token',
+            tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
+          ).toJson(),
+          'drive.desktop.profile.id': 'account-1',
+          'drive.desktop.profile.email': 'listener@example.com',
+          'drive.desktop.profile.name': 'Listener',
+        },
+      );
+      var invalidationCount = 0;
+      final repository = PlatformDriveAuthRepository(
+        config: const DriveOAuthConfig(
+          clientId: 'desktop-client-id',
+          serverClientId: '',
+          clientSecret: '',
+        ),
+        secureStorage: storage,
+        onDesktopSessionInvalidated: () async {
+          invalidationCount += 1;
+        },
+      );
+
+      await repository.restoreSession();
+
+      final error = oauth2.AuthorizationException(
+        'temporarily_unavailable',
+        'Try again later.',
+        null,
+      );
+      await expectLater(
+        repository.withClient((_) async => throw error),
+        throwsA(same(error)),
+      );
+
+      expect(invalidationCount, 0);
+      expect(storage.deletedKeys, isEmpty);
+      expect(storage.values['drive.desktop.credentials'], isNotNull);
     },
   );
 }
@@ -342,6 +457,73 @@ class _RetryableWriteSecureStorage extends FlutterSecureStorage {
       values[key] = value;
       successfulWrites += 1;
     }
+  }
+
+  @override
+  Future<void> deleteAll({
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    deleteAllCount += 1;
+    values.clear();
+  }
+}
+
+class _MapSecureStorage extends FlutterSecureStorage {
+  _MapSecureStorage({Map<String, String>? values})
+    : values = values ?? <String, String>{};
+
+  final Map<String, String> values;
+  final List<String> deletedKeys = <String>[];
+  int deleteAllCount = 0;
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    return values[key];
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      values.remove(key);
+      return;
+    }
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    deletedKeys.add(key);
+    values.remove(key);
   }
 
   @override

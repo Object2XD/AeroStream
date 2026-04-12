@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../database/app_database.dart';
+import 'drive_auth_repository.dart';
+import 'drive_entities.dart';
 import 'drive_metadata_catch_up_planner.dart';
 import 'drive_scan_job_enqueuer.dart';
 import 'drive_scan_job_lifecycle.dart';
@@ -124,6 +126,10 @@ class DriveScanRunner {
           return;
         }
       } catch (error, stackTrace) {
+        if (await _shouldDeferToReconnectState(job, error)) {
+          _logInfo('job_reauth_required', context: _jobContext(job));
+          return;
+        }
         _logError(
           'job_run_fail',
           context: _jobContext(job),
@@ -170,6 +176,16 @@ class DriveScanRunner {
       error: error,
       stackTrace: stackTrace,
     );
+  }
+
+  Future<bool> _shouldDeferToReconnectState(ScanJob job, Object error) async {
+    if (error is! DriveAuthSessionExpiredException) {
+      return false;
+    }
+    final account = await _database.getActiveAccount();
+    return account != null &&
+        account.id == job.accountId &&
+        account.authSessionState == DriveAuthSessionState.reauthRequired.value;
   }
 
   DriveScanLogContext _jobContext(

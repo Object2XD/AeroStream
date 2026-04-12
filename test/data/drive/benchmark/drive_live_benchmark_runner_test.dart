@@ -13,6 +13,7 @@ import 'package:aero_stream/data/drive/benchmark/drive_live_benchmark_runner.dar
 import 'package:aero_stream/data/drive/drive_scan_backlog.dart';
 import 'package:aero_stream/data/drive/metadata_pipeline_backlog.dart';
 import 'package:aero_stream/data/drive/drive_auth_repository.dart';
+import 'package:aero_stream/data/drive/drive_download_debug_meter.dart';
 import 'package:aero_stream/data/drive/drive_entities.dart';
 import 'package:aero_stream/data/drive/drive_http_client.dart';
 import 'package:aero_stream/data/drive/extraction/drive_artwork_extractor.dart';
@@ -590,10 +591,7 @@ void main() {
     'job-sample keeps read-model and live telemetry metadata backlogs separate',
     () async {
       const readModelBacklog = MetadataPipelineBacklog(
-        fetch: MetadataPipelineStageBacklog(
-          queuedCount: 4,
-          runningCount: 1,
-        ),
+        fetch: MetadataPipelineStageBacklog(queuedCount: 4, runningCount: 1),
       );
       const liveBacklog = MetadataPipelineBacklog(
         parse: MetadataPipelineStageBacklog(blockedCount: 2),
@@ -725,6 +723,70 @@ void main() {
       );
     },
   );
+
+  test('extractor reports unavailable when auth expires mid-run', () async {
+    final logger = BenchmarkRecordingDriveScanLogger();
+    final runner = DriveLiveBenchmarkRunner(
+      readModel: _FakeBenchmarkReadModel(
+        account: const BenchmarkActiveAccount(
+          id: 1,
+          providerAccountId: 'account-1',
+          email: 'listener@example.com',
+          displayName: 'Listener',
+          authKind: 'oauth_desktop',
+          authSessionState: 'ready',
+          authSessionError: null,
+        ),
+        tracks: <BenchmarkTrackCandidate>[
+          BenchmarkTrackCandidate(
+            track: _buildTrack(
+              driveFileId: 'track-auth-loss',
+              fileName: 'auth-loss.m4a',
+              mimeType: 'audio/mp4',
+              sizeBytes: 4096,
+            ),
+            source: DriveBenchmarkTrackSource.largestPending,
+          ),
+        ],
+      ),
+      authRepository: const _RestoringAuthRepository(),
+      driveHttpClient: BenchmarkingDriveHttpClient(
+        inner: _ByteDriveHttpClient(const <String, Uint8List>{}),
+      ),
+      metadataExtractor: _AuthFailingMetadataExtractor(
+        driveHttpClient: BenchmarkingDriveHttpClient(
+          inner: _ByteDriveHttpClient(const <String, Uint8List>{}),
+        ),
+      ),
+      artworkExtractor: DriveArtworkExtractor(
+        driveHttpClient: BenchmarkingDriveHttpClient(
+          inner: _ByteDriveHttpClient(const <String, Uint8List>{}),
+        ),
+      ),
+      logger: logger,
+    );
+    addTearDown(runner.close);
+
+    final report = await runner.run(
+      const DriveBenchmarkCommand(
+        mode: DriveBenchmarkMode.extractor,
+        kind: DriveBenchmarkKind.metadata,
+        source: DriveBenchmarkTrackSource.largestPending,
+        limit: 1,
+        concurrency: 1,
+        windowSeconds: 5,
+        repeatCount: 1,
+        jsonOutput: true,
+        failIfDownloadFileCalled: false,
+        driveFileIds: <String>[],
+      ),
+    );
+
+    expect(report.exitCode, 3);
+    expect(report.toJson()['status'], 'unavailable');
+    expect(report.toJson()['message'], driveAuthReconnectRequiredMessage);
+    expect(report.toJson()['failureCount'], isNull);
+  });
 }
 
 class _FakeBenchmarkReadModel implements DriveBenchmarkReadModel {
@@ -873,6 +935,18 @@ class _LoggingMissingSessionAuthRepository implements DriveAuthRepository {
   @override
   Future<T> withClient<T>(Future<T> Function(http.Client client) action) {
     throw UnimplementedError();
+  }
+}
+
+class _AuthFailingMetadataExtractor extends DriveMetadataExtractor {
+  _AuthFailingMetadataExtractor({required super.driveHttpClient});
+
+  @override
+  Future<DriveExtractedMetadata> extract(
+    Track track, {
+    DriveDownloadDebugContext? debugContext,
+  }) async {
+    throw const DriveAuthSessionExpiredException();
   }
 }
 
@@ -1035,7 +1109,10 @@ class _DirectDownloadMetadataExtractor extends DriveMetadataExtractor {
   final DriveHttpClient client;
 
   @override
-  Future<DriveExtractedMetadata> extract(Track track) async {
+  Future<DriveExtractedMetadata> extract(
+    Track track, {
+    DriveDownloadDebugContext? debugContext,
+  }) async {
     await client.downloadFile(fileId: track.driveFileId);
     return const DriveExtractedMetadata(
       title: 'Title',
